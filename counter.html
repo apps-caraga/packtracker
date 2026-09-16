@@ -500,6 +500,8 @@
             boxCooldownMs: 600,
             lastBarcodeScanned: null,
             lastBarcodeScanTime: 0,
+            lastBarcodeAttempt: 0,
+            barcodeScanInFlight: false,
             
             // Object centroid & tracking state
             trackedObject: null,
@@ -1730,6 +1732,22 @@
             }
         }
 
+        function modeDisplayLabel() {
+            return state.mode === 'qr_only' ? 'QR/Barcode Scanner' : 'Box Counter';
+        }
+
+        function updateSystemStatusText() {
+            if (!elements.statusText) return;
+            const t = elements.statusText.innerText;
+            if (t === 'Connecting Camera...' || t === 'Camera Access Failed' || t.startsWith('Initializing')) {
+                return;
+            }
+            const label = modeDisplayLabel();
+            elements.statusText.innerText = state.isCameraActive
+                ? `System Active — ${label}`
+                : `Camera Stopped — ${label}`;
+        }
+
         function updateCameraToggleUI() {
             const active = state.isCameraActive;
             elements.toggleCameraBtn.title = active ? 'Stop Camera' : 'Start Camera';
@@ -1768,7 +1786,6 @@
             elements.toggleTorchBtn.classList.remove('text-amber-400');
             elements.toggleTorchBtn.classList.add('text-slate-400');
 
-            elements.statusText.innerText = 'Camera Stopped';
             elements.statusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-500';
             elements.statusPing.classList.add('hidden');
 
@@ -1777,6 +1794,7 @@
             ctx.fillRect(0, 0, canvas.width || 640, canvas.height || 480);
 
             updateCameraToggleUI();
+            updateSystemStatusText();
         }
 
         async function startCamera(deviceId = null) {
@@ -1804,7 +1822,7 @@
                 await elements.webcamVideo.play();
 
                 state.isCameraActive = true;
-                elements.statusText.innerText = "System Active";
+                updateSystemStatusText();
                 elements.statusDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500";
                 elements.statusPing.classList.add('hidden');
 
@@ -1877,7 +1895,7 @@
             }
 
             if (state.mode === 'qr_only') {
-                await detectBarcode(video);
+                scheduleBarcodeDetect();
             }
 
             drawRoiOverlay(width, height);
@@ -2075,10 +2093,32 @@
             }
         }
 
-        async function detectBarcode(video) {
-            const now = Date.now();
-            if (now - state.lastBarcodeScanTime < 300) return;
+        function resetBarcodeEngine() {
+            state.barcodeScanInFlight = false;
+            if (state.zxingReader && typeof state.zxingReader.reset === 'function') {
+                try {
+                    state.zxingReader.reset();
+                } catch (e) {
+                    console.warn('ZXing reset failed', e);
+                }
+            }
+        }
 
+        function scheduleBarcodeDetect() {
+            const now = Date.now();
+            if (state.barcodeScanInFlight) return;
+            if (now - state.lastBarcodeAttempt < 200) return;
+            state.lastBarcodeAttempt = now;
+            state.barcodeScanInFlight = true;
+            detectBarcode()
+                .catch(() => {})
+                .finally(() => {
+                    state.barcodeScanInFlight = false;
+                });
+        }
+
+        async function detectBarcode() {
+            const video = elements.webcamVideo;
             let codeFound = null;
 
             if (state.barcodeDetector) {
@@ -2094,7 +2134,7 @@
 
             if (!codeFound && state.zxingReader) {
                 try {
-                    const result = await state.zxingReader.decodeFromVideoElement(video);
+                    const result = await state.zxingReader.decodeFromCanvasElement(elements.viewCanvas);
                     if (result) {
                         codeFound = result.text;
                     }
@@ -2104,6 +2144,9 @@
             }
 
             if (codeFound && codeFound !== state.lastBarcodeScanned) {
+                const now = Date.now();
+                if (now - state.lastBarcodeScanTime < 300) return;
+
                 state.lastBarcodeScanned = codeFound;
                 state.lastBarcodeScanTime = now;
 
@@ -2684,7 +2727,9 @@
                     btn.classList.add('bg-emerald-600', 'border-emerald-500', 'text-white', 'shadow-lg');
 
                     state.mode = btn.dataset.mode;
-                    
+                    resetBarcodeEngine();
+                    state.prevFrameImageData = null;
+
                     const motionGroup = document.getElementById('motionControlsGroup');
                     if (state.mode === 'qr_only') {
                         motionGroup.style.opacity = '0.4';
@@ -2694,6 +2739,7 @@
                         motionGroup.style.pointerEvents = 'auto';
                     }
 
+                    updateSystemStatusText();
                     saveToLocalStorage();
                 });
             });

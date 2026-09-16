@@ -1738,14 +1738,16 @@
 
         function updateSystemStatusText() {
             if (!elements.statusText) return;
+            const label = modeDisplayLabel();
+            if (state.isCameraActive) {
+                elements.statusText.innerText = `System Active — ${label}`;
+                return;
+            }
             const t = elements.statusText.innerText;
             if (t === 'Connecting Camera...' || t === 'Camera Access Failed' || t.startsWith('Initializing')) {
                 return;
             }
-            const label = modeDisplayLabel();
-            elements.statusText.innerText = state.isCameraActive
-                ? `System Active — ${label}`
-                : `Camera Stopped — ${label}`;
+            elements.statusText.innerText = `Camera Stopped — ${label}`;
         }
 
         function updateCameraToggleUI() {
@@ -1794,7 +1796,7 @@
             ctx.fillRect(0, 0, canvas.width || 640, canvas.height || 480);
 
             updateCameraToggleUI();
-            updateSystemStatusText();
+            elements.statusText.innerText = `Camera Stopped — ${modeDisplayLabel()}`;
         }
 
         async function startCamera(deviceId = null) {

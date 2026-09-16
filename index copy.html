@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full theme-root" data-theme="dark">
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,8 +7,6 @@
     
     <!-- PWA Primary Meta Tags -->
     <meta name="theme-color" content="#0f172a">
-    <script src="dashboard-theme.js"></script>
-    <link rel="stylesheet" href="dashboard-themes.css">
     <meta name="description" content="Automated Family Food Pack box counter and QR/Barcode scanner PWA">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -25,6 +23,9 @@
 
     <style>
         ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
         .pulse-active {
             animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
@@ -39,27 +40,9 @@
             touch-action: none;
             cursor: crosshair;
         }
-
-        #settingsOffcanvas.settings-open {
-            transform: translateX(0);
-        }
-        #settingsBackdrop.settings-open {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        html {
-            height: 100%;
-            overflow: hidden;
-        }
-
-        #logListContainer {
-            overscroll-behavior: contain;
-            -webkit-overflow-scrolling: touch;
-        }
     </style>
 </head>
-<body class="h-full flex flex-col font-sans antialiased overflow-hidden selection:theme">
+<body class="h-full flex flex-col font-sans antialiased overflow-x-hidden selection:bg-emerald-500 selection:text-white">
 
     <!-- Passkey gate (client-only WebAuthn; no server) -->
     <div id="passkeyGate" class="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur flex items-center justify-center p-4">
@@ -119,25 +102,29 @@
                 <button id="passkeyLockBtn" type="button" title="Lock app" class="hidden p-2 text-slate-400 hover:text-amber-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition">
                     <i data-lucide="lock" class="w-4 h-4"></i>
                 </button>
-                <button id="settingsOpenBtn" type="button" title="Settings" class="p-2 text-slate-400 hover:text-emerald-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition">
-                    <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
-                </button>
                 <button id="pwaInstallBtn" class="hidden items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg shadow-lg shadow-emerald-900/20 transition-all">
                     <i data-lucide="download" class="w-4 h-4"></i>
                     <span class="hidden sm:inline">Install App</span>
                 </button>
+                <div class="flex items-center gap-2 bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-1.5 text-xs text-slate-300">
+                    <span class="relative flex h-2.5 w-2.5">
+                      <span id="statusPing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span id="statusDot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    </span>
+                    <span id="statusText" class="font-medium">Initializing Camera...</span>
+                </div>
             </div>
         </div>
     </header>
 
     <!-- Main Content Area -->
-    <main class="flex-1 min-h-0 max-w-7xl w-full mx-auto p-3 sm:p-4 md:p-6 flex flex-col lg:grid lg:grid-cols-12 gap-4 lg:gap-6 overflow-hidden">
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
         
         <!-- Left Column: Camera Feed & Realtime Controls -->
-        <section class="lg:col-span-7 flex flex-col gap-4 shrink-0 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain">
+        <section class="lg:col-span-7 flex flex-col gap-4">
             
             <!-- Video & Detection Zone Canvas Overlay Card -->
-            <div class="camera-chrome relative bg-slate-800 border border-slate-700/70 rounded-2xl overflow-hidden shadow-2xl flex flex-col justify-center items-center min-h-[320px] sm:min-h-[420px]">
+            <div class="relative bg-slate-800 border border-slate-700/70 rounded-2xl overflow-hidden shadow-2xl flex flex-col justify-center items-center min-h-[320px] sm:min-h-[420px]">
                 
                 <!-- Hidden raw video element -->
                 <video id="webcamVideo" class="hidden" playsinline muted autoplay></video>
@@ -149,15 +136,6 @@
                 <div id="detectionOverlay" class="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500/90 text-white font-bold text-sm sm:text-base rounded-full shadow-lg border border-emerald-300/40 backdrop-blur opacity-0 transition-opacity duration-200 pointer-events-none flex items-center gap-2 z-30">
                     <i data-lucide="scan-line" class="w-5 h-5 animate-spin"></i>
                     <span id="detectionOverlayText">PACK DETECTED!</span>
-                </div>
-
-                <!-- Camera / system status (top left) -->
-                <div class="absolute top-3 left-3 flex items-center gap-2 bg-slate-900/80 backdrop-blur border border-slate-700 rounded-xl px-2.5 py-1.5 text-[11px] sm:text-xs text-slate-300 z-20 pointer-events-none">
-                    <span class="relative flex h-2.5 w-2.5 shrink-0">
-                        <span id="statusPing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                        <span id="statusDot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-                    </span>
-                    <span id="statusText" class="font-medium whitespace-nowrap">Initializing Camera...</span>
                 </div>
 
                 <!-- Canvas Control Quick Bar (Top Right) -->
@@ -186,102 +164,7 @@
                 </div>
             </div>
 
-            <!-- Counter Display Card (below camera) -->
-            <div class="count-display-card bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/80 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden">
-                <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
-
-                <span class="count-display-label text-xs font-bold uppercase tracking-widest text-emerald-400/90 mb-1 flex items-center gap-1.5">
-                    <i data-lucide="award" class="w-4 h-4"></i> Total Packs Counted
-                </span>
-
-                <div class="flex items-baseline justify-center gap-2 my-1">
-                    <div id="mainCountDisplay" class="count-display-num text-5xl sm:text-6xl font-black tracking-tight font-mono drop-shadow-md">
-                        0
-                    </div>
-                    <p id="lineTargetLabel" class="hidden text-lg sm:text-xl font-bold font-mono text-amber-300/90 tabular-nums">/ 11</p>
-                </div>
-                <p id="lineTargetStatus" class="hidden text-[11px] text-emerald-400/90 font-semibold uppercase tracking-wide mb-1">Line target met — counting paused</p>
-
-                <div class="grid grid-cols-2 gap-3 w-full max-w-md mt-2 pt-3 border-t border-slate-700/60 count-display-divider text-xs">
-                    <div class="count-display-stat bg-slate-900/50 p-2.5 rounded-xl border border-slate-800 flex flex-col items-center">
-                        <span class="count-display-stat-label text-slate-400 text-[11px]">Packs / Min</span>
-                        <span id="ratePerMin" class="count-display-stat-value font-mono font-bold text-slate-200 text-sm mt-0.5">0.0</span>
-                    </div>
-                    <div class="count-display-stat bg-slate-900/50 p-2.5 rounded-xl border border-slate-800 flex flex-col items-center">
-                        <span class="count-display-stat-label text-slate-400 text-[11px]">Session Time</span>
-                        <span id="sessionTimer" class="count-display-stat-value font-mono font-bold text-slate-200 text-sm mt-0.5">00:00</span>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-2 w-full max-w-md mt-3">
-                    <button id="manualAddBtn" class="flex-1 py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
-                        <i data-lucide="plus" class="w-4 h-4"></i> +1 Manual
-                    </button>
-                    <button id="manualSubBtn" class="flex-1 py-2 px-3 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
-                        <i data-lucide="minus" class="w-4 h-4"></i> −1 Correction
-                    </button>
-                    <button id="resetCountBtn" class="py-2 px-3 bg-slate-800 hover:bg-rose-900/30 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-700/50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
-                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reset
-                    </button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Right Column: Activity Log -->
-        <section class="lg:col-span-5 flex flex-col min-h-0 flex-1 overflow-hidden">
-
-            <!-- Scan / Detection Log Card -->
-            <div class="flex-1 min-h-0 bg-slate-800 border border-slate-700/70 rounded-2xl p-4 shadow-xl flex flex-col overflow-hidden">
-                <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-700/60 shrink-0">
-                    <div class="flex items-center gap-2">
-                        <i data-lucide="history" class="w-4 h-4 text-emerald-400"></i>
-                        <h3 class="font-bold text-sm text-slate-200">Activity Log</h3>
-                        <span id="logCountBadge" class="bg-slate-900 text-slate-400 text-[10px] font-mono px-2 py-0.5 rounded-full border border-slate-700">0 entries</span>
-                    </div>
-
-                    <div class="flex items-center gap-1.5">
-                        <button id="exportCsvBtn" title="Export CSV" class="p-1.5 bg-slate-900 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center gap-1 border border-slate-700 transition">
-                            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-400"></i>
-                            <span class="hidden sm:inline">CSV</span>
-                        </button>
-                        <button id="exportJsonBtn" title="Export JSON" class="p-1.5 bg-slate-900 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center gap-1 border border-slate-700 transition">
-                            <i data-lucide="file-json" class="w-3.5 h-3.5 text-blue-400"></i>
-                            <span class="hidden sm:inline">JSON</span>
-                        </button>
-                        <button id="clearLogBtn" title="Clear History" class="p-1.5 bg-slate-900 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 rounded-lg text-xs border border-slate-700 transition">
-                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1" id="logListContainer">
-                    <div id="emptyLogState" class="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
-                        <i data-lucide="inbox" class="w-8 h-8 opacity-40"></i>
-                        <p class="text-xs">No food packs counted yet.<br>Move boxes through the target zone or scan barcodes.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <!-- Settings offcanvas (right) -->
-    <div id="settingsBackdrop" class="fixed inset-0 z-[90] bg-slate-950/70 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300" aria-hidden="true"></div>
-    <aside id="settingsOffcanvas" class="fixed top-0 right-0 z-[95] h-full w-full max-w-md bg-slate-900 border-l border-slate-700/80 shadow-2xl flex flex-col translate-x-full transition-transform duration-300 ease-out" aria-hidden="true">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700/70 bg-slate-800/80 shrink-0">
-            <h2 class="font-bold text-sm text-slate-100 flex items-center gap-2">
-                <i data-lucide="sliders-horizontal" class="w-4 h-4 text-emerald-400"></i>
-                Settings
-            </h2>
-            <button type="button" id="settingsCloseBtn" title="Close settings" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition">
-                <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-        </div>
-        <div class="flex-1 overflow-y-auto p-4 space-y-4">
-            <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 space-y-2 text-xs text-slate-300">
-                <label for="themeSelect" class="block text-slate-400 font-medium">Theme</label>
-                <select id="themeSelect" class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"></select>
-                <p class="text-[10px] text-slate-500">Shared with dashboard in this browser.</p>
-            </div>
+            <!-- Operating Mode Selector Card -->
             <div class="bg-slate-800 border border-slate-700/70 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
                 <div>
                     <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">Detection Mode</label>
@@ -369,6 +252,82 @@
                     </select>
                 </div>
             </div>
+        </section>
+
+        <!-- Right Column: Dashboard Statistics & Recorded Logs -->
+        <section class="lg:col-span-5 flex flex-col gap-4">
+            
+            <!-- Counter Display Card -->
+            <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/80 rounded-2xl p-5 shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden">
+                <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+                
+                <span class="text-xs font-bold uppercase tracking-widest text-emerald-400/90 mb-1 flex items-center gap-1.5">
+                    <i data-lucide="award" class="w-4 h-4"></i> Total Packs Counted
+                </span>
+                
+                <div id="mainCountDisplay" class="text-6xl sm:text-7xl font-black tracking-tight text-white font-mono my-2 drop-shadow-md">
+                    0
+                </div>
+
+                <!-- Sub-stats Bar -->
+                <div class="grid grid-cols-2 gap-3 w-full mt-2 pt-3 border-t border-slate-700/60 text-xs">
+                    <div class="bg-slate-900/50 p-2.5 rounded-xl border border-slate-800 flex flex-col items-center">
+                        <span class="text-slate-400 text-[11px]">Packs / Min</span>
+                        <span id="ratePerMin" class="font-mono font-bold text-slate-200 text-sm mt-0.5">0.0</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-2.5 rounded-xl border border-slate-800 flex flex-col items-center">
+                        <span class="text-slate-400 text-[11px]">Session Time</span>
+                        <span id="sessionTimer" class="font-mono font-bold text-slate-200 text-sm mt-0.5">00:00</span>
+                    </div>
+                </div>
+
+                <!-- Quick Action Buttons -->
+                <div class="flex items-center gap-2 w-full mt-4">
+                    <button id="manualAddBtn" class="flex-1 py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                        <i data-lucide="plus" class="w-4 h-4"></i> +1 Manual
+                    </button>
+                    <button id="manualSubBtn" class="flex-1 py-2 px-3 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                        <i data-lucide="minus" class="w-4 h-4"></i> −1 Correction
+                    </button>
+                    <button id="resetCountBtn" class="py-2 px-3 bg-slate-800 hover:bg-rose-900/30 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-700/50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reset
+                    </button>
+                </div>
+            </div>
+
+            <!-- Scan / Detection Log Card -->
+            <div class="flex-1 bg-slate-800 border border-slate-700/70 rounded-2xl p-4 shadow-xl flex flex-col min-h-[350px]">
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-700/60">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="history" class="w-4 h-4 text-emerald-400"></i>
+                        <h3 class="font-bold text-sm text-slate-200">Activity Log</h3>
+                        <span id="logCountBadge" class="bg-slate-900 text-slate-400 text-[10px] font-mono px-2 py-0.5 rounded-full border border-slate-700">0 entries</span>
+                    </div>
+                    
+                    <!-- Log Actions -->
+                    <div class="flex items-center gap-1.5">
+                        <button id="exportCsvBtn" title="Export CSV" class="p-1.5 bg-slate-900 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center gap-1 border border-slate-700 transition">
+                            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-400"></i>
+                            <span class="hidden sm:inline">CSV</span>
+                        </button>
+                        <button id="exportJsonBtn" title="Export JSON" class="p-1.5 bg-slate-900 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center gap-1 border border-slate-700 transition">
+                            <i data-lucide="file-json" class="w-3.5 h-3.5 text-blue-400"></i>
+                            <span class="hidden sm:inline">JSON</span>
+                        </button>
+                        <button id="clearLogBtn" title="Clear History" class="p-1.5 bg-slate-900 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 rounded-lg text-xs border border-slate-700 transition">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Scrollable Log Table Container -->
+                <div class="flex-1 overflow-y-auto max-h-[380px] space-y-2 pr-1" id="logListContainer">
+                    <div id="emptyLogState" class="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
+                        <i data-lucide="inbox" class="w-8 h-8 opacity-40"></i>
+                        <p class="text-xs">No food packs counted yet.<br>Move boxes through the target zone or scan barcodes.</p>
+                    </div>
+                </div>
+            </div>
 
             <!-- Audio & Feedback Settings Bar -->
             <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex items-center justify-between text-xs text-slate-300">
@@ -407,56 +366,8 @@
                 <input type="file" id="passkeySettingsImportInput" accept="application/json,.json" class="hidden">
             </div>
 
-            <!-- Upstash Redis sync (optional) -->
-            <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 space-y-3 text-xs text-slate-300">
-                <div class="flex items-center justify-between gap-2">
-                    <span class="font-medium flex items-center gap-1.5">
-                        <i data-lucide="database" class="w-4 h-4 text-red-400"></i> Upstash Redis sync
-                    </span>
-                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                        <input type="checkbox" id="redisEnableToggle" class="sr-only peer">
-                        <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500"></div>
-                    </label>
-                </div>
-                <p class="text-[11px] text-slate-500 leading-relaxed">
-                    Configure Upstash once on <strong class="text-slate-400">dashboard.html</strong> — counters pull URL, token, and key prefix from there (Redis or same-browser settings). You only set <strong class="text-slate-400">line number</strong> per device.
-                </p>
-                <label class="flex items-center justify-between gap-2 cursor-pointer py-1">
-                    <span class="text-slate-400">Use dashboard Upstash settings</span>
-                    <input type="checkbox" id="redisUseDashboardToggle" class="rounded border-slate-600" checked>
-                </label>
-                <button type="button" id="redisRefreshFromDashboardBtn" class="w-full py-1.5 px-3 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 rounded-lg font-semibold transition">
-                    Refresh from dashboard
-                </button>
-                <div class="space-y-2">
-                    <div>
-                        <label for="redisRestUrl" class="block text-slate-400 font-medium mb-1">REST URL</label>
-                        <input type="url" id="redisRestUrl" autocomplete="off" placeholder="https://xxx.upstash.io" class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none font-mono">
-                    </div>
-                    <div>
-                        <label for="redisRestToken" class="block text-slate-400 font-medium mb-1">REST token (Standard / write)</label>
-                        <input type="password" id="redisRestToken" autocomplete="off" placeholder="AX..." class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none font-mono">
-                    </div>
-                    <div>
-                        <label for="redisKeyPrefix" class="block text-slate-400 font-medium mb-1">Key prefix (base)</label>
-                        <input type="text" id="redisKeyPrefix" autocomplete="off" value="packtracker" class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none font-mono">
-                    </div>
-                    <div>
-                        <label for="redisLineNumber" class="block text-slate-400 font-medium mb-1">Line number <span class="text-rose-400/90">*</span></label>
-                        <input type="text" inputmode="numeric" id="redisLineNumber" autocomplete="off" placeholder="1" class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none font-mono">
-                        <p class="text-[10px] text-slate-500 mt-0.5">Each device needs a unique line (1, 2, 3…). Bookmark <code class="text-slate-400">counter.html?line=2</code> per belt.</p>
-                        <p id="redisKeyPrefixPreview" class="mt-1 text-[10px] text-slate-500 font-mono">Keys: packtracker_line_1:events</p>
-                    </div>
-                </div>
-                <div class="flex flex-wrap items-center gap-2 pt-1">
-                    <button type="button" id="redisTestBtn" class="py-1.5 px-3 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 rounded-lg font-semibold transition">
-                        Test connection
-                    </button>
-                    <span id="redisSyncStatus" class="text-[11px] text-slate-500">Off</span>
-                </div>
-            </div>
-        </div>
-    </aside>
+        </section>
+    </main>
 
     <script>
         // Global Application State
@@ -500,10 +411,6 @@
             boxCooldownMs: 600,
             lastBarcodeScanned: null,
             lastBarcodeScanTime: 0,
-            lastBarcodeAttempt: 0,
-            barcodeScanInFlight: false,
-            qrScanIntervalId: null,
-            barcodeDecodeCanvas: null,
             
             // Object centroid & tracking state
             trackedObject: null,
@@ -511,19 +418,7 @@
             // Barcode Scanner Engines
             barcodeDetector: null,
             zxingReader: null,
-            animationFrameId: null,
-
-            upstash: {
-                enabled: false,
-                restUrl: '',
-                restToken: '',
-                keyPrefix: 'packtracker',
-                lineNumber: '',
-                useDashboardConfig: true
-            },
-
-            lineTargetCap: 0,
-            dashboardTargetPollId: null
+            animationFrameId: null
         };
 
         // DOM Elements Cache
@@ -536,8 +431,6 @@
             detectionOverlay: document.getElementById('detectionOverlay'),
             detectionOverlayText: document.getElementById('detectionOverlayText'),
             mainCountDisplay: document.getElementById('mainCountDisplay'),
-            lineTargetLabel: document.getElementById('lineTargetLabel'),
-            lineTargetStatus: document.getElementById('lineTargetStatus'),
             ratePerMin: document.getElementById('ratePerMin'),
             sessionTimer: document.getElementById('sessionTimer'),
             sensitivitySlider: document.getElementById('sensitivitySlider'),
@@ -588,622 +481,7 @@
             passkeyRemoveBtn: document.getElementById('passkeyRemoveBtn'),
             passkeySettingsExportBtn: document.getElementById('passkeySettingsExportBtn'),
             passkeySettingsImportBtn: document.getElementById('passkeySettingsImportBtn'),
-            passkeySettingsImportInput: document.getElementById('passkeySettingsImportInput'),
-            settingsOpenBtn: document.getElementById('settingsOpenBtn'),
-            settingsCloseBtn: document.getElementById('settingsCloseBtn'),
-            settingsOffcanvas: document.getElementById('settingsOffcanvas'),
-            settingsBackdrop: document.getElementById('settingsBackdrop'),
-            redisEnableToggle: document.getElementById('redisEnableToggle'),
-            redisRestUrl: document.getElementById('redisRestUrl'),
-            redisRestToken: document.getElementById('redisRestToken'),
-            redisKeyPrefix: document.getElementById('redisKeyPrefix'),
-            redisLineNumber: document.getElementById('redisLineNumber'),
-            redisKeyPrefixPreview: document.getElementById('redisKeyPrefixPreview'),
-            redisTestBtn: document.getElementById('redisTestBtn'),
-            redisSyncStatus: document.getElementById('redisSyncStatus'),
-            redisUseDashboardToggle: document.getElementById('redisUseDashboardToggle'),
-            redisRefreshFromDashboardBtn: document.getElementById('redisRefreshFromDashboardBtn')
-        };
-
-        const UPSTASH_CONFIG_KEY = 'packtracker_upstash';
-        const DASHBOARD_STORAGE_KEY = 'packtracker_dashboard';
-
-        function parseKeyPrefixParts(full) {
-            const cleaned = (full || 'packtracker').replace(/:/g, '').trim() || 'packtracker';
-            let m = cleaned.match(/^(.+?)_line_(\d+)$/i);
-            if (m) return { base: m[1], lineNumber: m[2] };
-            m = cleaned.match(/^(.+?)_line(\d+)$/i);
-            if (m) return { base: m[1], lineNumber: m[2] };
-            return { base: cleaned, lineNumber: '' };
-        }
-
-        function normalizeLineNumber(raw) {
-            const digits = String(raw || '').trim().replace(/\D/g, '');
-            return digits || '';
-        }
-
-        function lineNumberFromUrl() {
-            return normalizeLineNumber(new URLSearchParams(window.location.search).get('line'));
-        }
-
-        function resolvedLineNumber(upstash = state.upstash) {
-            return normalizeLineNumber(upstash.lineNumber) || lineNumberFromUrl();
-        }
-
-        function effectiveRedisKeyPrefix(upstash = state.upstash) {
-            let base = (upstash.keyPrefix || 'packtracker').replace(/:/g, '').trim() || 'packtracker';
-            base = parseKeyPrefixParts(base).base;
-            const line = resolvedLineNumber(upstash);
-            if (!line) return base;
-            return `${base}_line_${line}`;
-        }
-
-        /** Per-line session state — avoids all lines sharing one count in the same browser */
-        function localStateStorageKey() {
-            const line = resolvedLineNumber();
-            return line ? `packtracker_state_line_${line}` : 'packtracker_state';
-        }
-
-        function distributeTarget(totalTarget, lineCount) {
-            const total = Math.max(0, Math.floor(Number(totalTarget) || 0));
-            const lines = Math.max(1, Math.floor(Number(lineCount) || 1));
-            const base = Math.floor(total / lines);
-            const remainder = total % lines;
-            return Array.from({ length: lines }, (_, i) => base + (i < remainder ? 1 : 0));
-        }
-
-        function dashboardMetaKey(suffix) {
-            const base = parseKeyPrefixParts(state.upstash.keyPrefix || 'packtracker').base;
-            return `${base}_dashboard:${suffix}`;
-        }
-
-        function computeLineTargetCap(totalTarget, lineCount) {
-            const total = Math.max(0, Math.floor(Number(totalTarget) || 0));
-            if (total <= 0) return 0;
-            const lines = Math.max(1, Math.floor(Number(lineCount) || 1));
-            const line = resolvedLineNumber();
-            if (!line) return 0;
-            const idx = parseInt(line, 10) - 1;
-            if (idx < 0 || idx >= lines) return 0;
-            const targets = distributeTarget(total, lines);
-            return targets[idx] ?? 0;
-        }
-
-        function canIncrementCount() {
-            const cap = state.lineTargetCap;
-            if (cap <= 0) return true;
-            return state.count < cap;
-        }
-
-        function isLineTargetReached() {
-            const cap = state.lineTargetCap;
-            return cap > 0 && state.count >= cap;
-        }
-
-        function dashboardMetaKeyForBase(base, suffix) {
-            const b = (base || 'packtracker').replace(/:/g, '').trim() || 'packtracker';
-            return `${b}_dashboard:${suffix}`;
-        }
-
-        function applyUpstashBootstrapFromUrl() {
-            const params = new URLSearchParams(window.location.search);
-            const encoded = params.get('upstash_bootstrap');
-            if (!encoded) return;
-            try {
-                const pad = encoded.length % 4 ? '='.repeat(4 - (encoded.length % 4)) : '';
-                const json = atob(encoded.replace(/-/g, '+').replace(/_/g, '/') + pad);
-                const o = JSON.parse(json);
-                if (o.restUrl) state.upstash.restUrl = o.restUrl.trim();
-                if (o.restToken) state.upstash.restToken = o.restToken.trim();
-                if (o.keyPrefixBase) state.upstash.keyPrefix = String(o.keyPrefixBase).replace(/:/g, '');
-                state.upstash.enabled = true;
-                params.delete('upstash_bootstrap');
-                const clean = new URL(window.location.href);
-                clean.search = params.toString();
-                window.history.replaceState({}, '', clean.pathname + (clean.search ? `?${clean.search}` : '') + clean.hash);
-            } catch (e) {
-                console.warn('Upstash bootstrap link invalid', e);
-            }
-        }
-
-        function mergeFromDashboardLocalStorage(force = false) {
-            try {
-                const raw = localStorage.getItem(DASHBOARD_STORAGE_KEY);
-                if (!raw) return false;
-                const c = JSON.parse(raw);
-                let changed = false;
-                if ((force || !state.upstash.restUrl) && c.restUrl) {
-                    state.upstash.restUrl = c.restUrl;
-                    changed = true;
-                }
-                if ((force || !state.upstash.restToken) && c.restToken) {
-                    state.upstash.restToken = c.restToken;
-                    changed = true;
-                }
-                const prefix = (c.keyPrefixBase || c.keyPrefix || '').replace(/:/g, '').replace(/_line_?\d+$/i, '');
-                if (prefix && (force || !state.upstash.keyPrefix || state.upstash.keyPrefix === 'packtracker')) {
-                    state.upstash.keyPrefix = prefix;
-                    changed = true;
-                }
-                return changed;
-            } catch (e) {
-                return false;
-            }
-        }
-
-        function applyDashboardRemoteReset(resetAt) {
-            const ts = (resetAt || '').trim();
-            if (!ts || ts === state.lastAckDashboardResetAt) return;
-            state.count = 0;
-            state.logs = [];
-            state.sessionStartTime = null;
-            if (state.sessionIntervalId) {
-                clearInterval(state.sessionIntervalId);
-                state.sessionIntervalId = null;
-            }
-            if (elements.sessionTimer) elements.sessionTimer.innerText = '00:00';
-            state.lastAckDashboardResetAt = ts;
-            updateCounterUI();
-            renderLogs();
-            saveToLocalStorage();
-            showDetectionOverlay('RESET FROM DASHBOARD');
-        }
-
-        const UpstashSync = {
-            setStatus(kind, message) {
-                const el = elements.redisSyncStatus;
-                if (!el) return;
-                const classes = {
-                    off: 'text-[11px] text-slate-500',
-                    ok: 'text-[11px] text-emerald-400',
-                    error: 'text-[11px] text-rose-400',
-                    busy: 'text-[11px] text-amber-400'
-                };
-                el.className = classes[kind] || classes.off;
-                el.textContent = message;
-            },
-
-            loadConfig() {
-                try {
-                    const lineFromUrl = normalizeLineNumber(new URLSearchParams(window.location.search).get('line'));
-                    applyUpstashBootstrapFromUrl();
-                    const raw = localStorage.getItem(UPSTASH_CONFIG_KEY);
-                    if (raw) {
-                        const parsed = JSON.parse(raw);
-                        state.upstash.enabled = !!parsed.enabled;
-                        state.upstash.useDashboardConfig = parsed.useDashboardConfig !== false;
-                        try {
-                            state.upstash.restUrl = parsed.restUrl ? this.normalizeRestUrl(parsed.restUrl) : '';
-                            state.upstash.restToken = parsed.restToken ? this.normalizeRestToken(parsed.restToken) : '';
-                        } catch (e) {
-                            state.upstash.restUrl = parsed.restUrl || '';
-                            state.upstash.restToken = parsed.restToken || '';
-                        }
-                        const parts = parseKeyPrefixParts(parsed.keyPrefix || 'packtracker');
-                        state.upstash.keyPrefix = parts.base;
-                        state.upstash.lineNumber = normalizeLineNumber(parsed.lineNumber) || parts.lineNumber;
-                    }
-                    if (lineFromUrl) state.upstash.lineNumber = lineFromUrl;
-                    if (state.upstash.useDashboardConfig) {
-                        mergeFromDashboardLocalStorage(true);
-                    }
-                } catch (e) {
-                    console.warn('Unable to load Upstash config', e);
-                }
-            },
-
-            saveConfig() {
-                try {
-                    localStorage.setItem(UPSTASH_CONFIG_KEY, JSON.stringify({
-                        enabled: state.upstash.enabled,
-                        restUrl: state.upstash.restUrl.trim(),
-                        restToken: state.upstash.restToken.trim(),
-                        keyPrefix: parseKeyPrefixParts(state.upstash.keyPrefix).base,
-                        lineNumber: normalizeLineNumber(state.upstash.lineNumber),
-                        useDashboardConfig: state.upstash.useDashboardConfig !== false
-                    }));
-                } catch (e) {
-                    console.warn('Unable to save Upstash config', e);
-                }
-            },
-
-            applyConfigToForm() {
-                if (!elements.redisEnableToggle) return;
-                elements.redisEnableToggle.checked = state.upstash.enabled;
-                elements.redisRestUrl.value = state.upstash.restUrl;
-                elements.redisRestToken.value = state.upstash.restToken;
-                elements.redisKeyPrefix.value = parseKeyPrefixParts(state.upstash.keyPrefix).base;
-                elements.redisLineNumber.value = normalizeLineNumber(state.upstash.lineNumber);
-                if (elements.redisUseDashboardToggle) {
-                    elements.redisUseDashboardToggle.checked = state.upstash.useDashboardConfig !== false;
-                }
-                this.updateKeyPrefixPreview();
-                this.setStatus(state.upstash.enabled ? 'ok' : 'off', state.upstash.enabled ? 'Enabled' : 'Off');
-            },
-
-            async syncFromDashboard() {
-                if (state.upstash.useDashboardConfig === false) return false;
-
-                mergeFromDashboardLocalStorage(true);
-
-                if (!this.canQueryRedis()) {
-                    if (state.upstash.restUrl && state.upstash.restToken) {
-                        state.upstash.enabled = true;
-                        this.saveConfig();
-                    }
-                    return !!state.upstash.restUrl;
-                }
-
-                const bases = [...new Set([
-                    parseKeyPrefixParts(state.upstash.keyPrefix).base,
-                    'packtracker'
-                ])];
-
-                for (const base of bases) {
-                    try {
-                        const results = await this.request([
-                            ['GET', dashboardMetaKeyForBase(base, 'upstashPublished')],
-                            ['GET', dashboardMetaKeyForBase(base, 'restUrl')],
-                            ['GET', dashboardMetaKeyForBase(base, 'restToken')],
-                            ['GET', dashboardMetaKeyForBase(base, 'keyPrefixBase')]
-                        ], true);
-                        if (results[0] !== '1') continue;
-                        if (results[1]) state.upstash.restUrl = this.normalizeRestUrl(results[1]);
-                        if (results[2]) state.upstash.restToken = this.normalizeRestToken(results[2]);
-                        if (results[3]) state.upstash.keyPrefix = String(results[3]).replace(/:/g, '');
-                        state.upstash.enabled = true;
-                        this.saveConfig();
-                        this.setStatus('ok', 'Synced from dashboard');
-                        return true;
-                    } catch (err) {
-                        console.warn('Dashboard Upstash fetch failed for base', base, err);
-                    }
-                }
-
-                if (state.upstash.restUrl && state.upstash.restToken) {
-                    state.upstash.enabled = true;
-                    this.saveConfig();
-                    return true;
-                }
-                this.setStatus('error', 'Configure dashboard Upstash first');
-                return false;
-            },
-
-            updateKeyPrefixPreview() {
-                if (!elements.redisKeyPrefixPreview) return;
-                const line = resolvedLineNumber();
-                if (!line) {
-                    elements.redisKeyPrefixPreview.textContent = 'Set line number — keys will be {base}_line_N:count';
-                    elements.redisKeyPrefixPreview.className = 'mt-1 text-[10px] text-amber-400/90 font-mono';
-                    return;
-                }
-                const prefix = effectiveRedisKeyPrefix();
-                elements.redisKeyPrefixPreview.className = 'mt-1 text-[10px] text-slate-500 font-mono';
-                elements.redisKeyPrefixPreview.textContent = `Keys: ${prefix}:events, ${prefix}:count, …`;
-            },
-
-            normalizeRestUrl(raw) {
-                let url = (raw || '').trim();
-                const fromEnv = url.match(/UPSTASH_REDIS_REST_URL\s*=\s*['"]?(https?:\/\/[^\s'"]+)/i);
-                if (fromEnv) url = fromEnv[1];
-                url = url.replace(/^Bearer\s+/i, '');
-                url = url.replace(/\/pipeline\/?$/i, '');
-                url = url.replace(/\/$/, '');
-                if (url.startsWith('redis://') || url.startsWith('rediss://')) {
-                    throw new Error('Use the HTTPS REST endpoint, not the redis:// connection URL.');
-                }
-                if (url && !/^https?:\/\//i.test(url)) {
-                    url = `https://${url}`;
-                }
-                return url;
-            },
-
-            normalizeRestToken(raw) {
-                let token = (raw || '').trim();
-                const fromEnv = token.match(/UPSTASH_REDIS_REST_TOKEN\s*=\s*['"]?([^\s'"]+)/i);
-                if (fromEnv) token = fromEnv[1];
-                token = token.replace(/^Bearer\s+/i, '');
-                token = token.replace(/^['"]|['"]$/g, '');
-                return token;
-            },
-
-            friendlyRedisError(message) {
-                const msg = String(message || '');
-                if (/WRONGPASS|unauthorized|401/i.test(msg)) {
-                    return 'Invalid REST token. Use Connect → REST → Standard token (not redis:// password).';
-                }
-                if (/NOPERM|no permissions|read.?only/i.test(msg)) {
-                    return 'Read-only token cannot write. In Upstash REST tab, disable “Read-Only Token” and copy the Standard token.';
-                }
-                return msg || 'Request failed';
-            },
-
-            async verifyWriteAccess() {
-                const prefix = effectiveRedisKeyPrefix();
-                const probeKey = `${prefix}:_write_probe`;
-                await this.request(['SET', probeKey, '1', 'EX', 60]);
-                await this.request(['DEL', probeKey]);
-            },
-
-            readFormIntoState() {
-                state.upstash.enabled = elements.redisEnableToggle.checked;
-                try {
-                    state.upstash.restUrl = this.normalizeRestUrl(elements.redisRestUrl.value);
-                    state.upstash.restToken = this.normalizeRestToken(elements.redisRestToken.value);
-                } catch (err) {
-                    alert(err.message);
-                    return;
-                }
-                state.upstash.keyPrefix = parseKeyPrefixParts(elements.redisKeyPrefix.value.trim() || 'packtracker').base;
-                state.upstash.lineNumber = normalizeLineNumber(elements.redisLineNumber.value) || lineNumberFromUrl();
-                if (elements.redisUseDashboardToggle) {
-                    state.upstash.useDashboardConfig = elements.redisUseDashboardToggle.checked;
-                }
-                elements.redisKeyPrefix.value = state.upstash.keyPrefix;
-                elements.redisLineNumber.value = state.upstash.lineNumber;
-                this.updateKeyPrefixPreview();
-                elements.redisRestUrl.value = state.upstash.restUrl;
-                elements.redisRestToken.value = state.upstash.restToken;
-                this.saveConfig();
-                this.startDashboardTargetPolling();
-            },
-
-            isReady() {
-                return state.upstash.enabled
-                    && state.upstash.restUrl
-                    && state.upstash.restToken
-                    && !!resolvedLineNumber();
-            },
-
-            restBaseUrl() {
-                return this.normalizeRestUrl(state.upstash.restUrl);
-            },
-
-            restToken() {
-                return this.normalizeRestToken(state.upstash.restToken);
-            },
-
-            authHeaders(jsonBody = false) {
-                const headers = {
-                    Authorization: `Bearer ${this.restToken()}`
-                };
-                if (jsonBody) {
-                    headers['Content-Type'] = 'application/json';
-                }
-                return headers;
-            },
-
-            parseResponse(data, res, pipeline = false) {
-                if (pipeline && Array.isArray(data)) {
-                    const failed = data.find(item => item && item.error);
-                    if (failed) {
-                        throw new Error(failed.error);
-                    }
-                    return data.map(item => (item ? item.result : null));
-                }
-                if (data && data.error) {
-                    throw new Error(data.error);
-                }
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}`);
-                }
-                return data.result;
-            },
-
-            async request(body, pipeline = false) {
-                const base = this.restBaseUrl();
-                const token = this.restToken();
-                if (!base || !token) {
-                    throw new Error('REST URL and token are required.');
-                }
-
-                const url = pipeline ? `${base}/pipeline` : base;
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: this.authHeaders(true),
-                    body: JSON.stringify(body)
-                });
-                let data = null;
-                try {
-                    data = await res.json();
-                } catch (e) {
-                    throw new Error(`Invalid response (${res.status})`);
-                }
-                return this.parseResponse(data, res, pipeline);
-            },
-
-            async ping() {
-                const base = this.restBaseUrl();
-                const token = this.restToken();
-                if (!base || !token) {
-                    throw new Error('REST URL and token are required.');
-                }
-                const res = await fetch(`${base}/ping`, {
-                    method: 'GET',
-                    headers: this.authHeaders()
-                });
-                let data = null;
-                try {
-                    data = await res.json();
-                } catch (e) {
-                    throw new Error(`Invalid response (${res.status})`);
-                }
-                return this.parseResponse(data, res, false);
-            },
-
-            async pushLogEntry(logItem, eventKind = 'count') {
-                if (!this.isReady()) return;
-
-                const prefix = effectiveRedisKeyPrefix();
-                const eventsKey = `${prefix}:events`;
-                const payload = JSON.stringify({
-                    event: eventKind,
-                    totalCount: state.count,
-                    recordedAt: new Date().toISOString(),
-                    ...logItem
-                });
-
-                try {
-                    await this.request([
-                        ['LPUSH', eventsKey, payload],
-                        ['LTRIM', eventsKey, 0, 499],
-                        ['SET', `${prefix}:count`, String(state.count)],
-                        ['SET', `${prefix}:updatedAt`, new Date().toISOString()]
-                    ], true);
-                    this.setStatus('ok', 'Synced');
-                } catch (err) {
-                    console.warn('Upstash sync failed:', err);
-                    this.setStatus('error', this.friendlyRedisError(err.message));
-                }
-            },
-
-            canQueryRedis() {
-                return !!(state.upstash.restUrl && state.upstash.restToken);
-            },
-
-            async refreshLineTargetCap() {
-                if (!this.canQueryRedis()) {
-                    state.lineTargetCap = 0;
-                    updateCounterUI();
-                    return;
-                }
-                try {
-                    const results = await this.request([
-                        ['GET', dashboardMetaKey('totalTarget')],
-                        ['GET', dashboardMetaKey('lineCount')],
-                        ['GET', dashboardMetaKey('resetAt')]
-                    ], true);
-                    const totalTarget = parseInt(results[0], 10) || 0;
-                    const lineCount = parseInt(results[1], 10) || 0;
-                    applyDashboardRemoteReset(results[2]);
-                    state.lineTargetCap = computeLineTargetCap(totalTarget, lineCount || 1);
-                    updateCounterUI();
-                } catch (err) {
-                    console.warn('Unable to load dashboard targets', err);
-                }
-            },
-
-            startDashboardTargetPolling() {
-                if (state.dashboardTargetPollId) clearInterval(state.dashboardTargetPollId);
-                if (!this.canQueryRedis()) return;
-                this.refreshLineTargetCap();
-                state.dashboardTargetPollId = setInterval(() => this.refreshLineTargetCap(), 12000);
-            },
-
-            async pushCountReset() {
-                if (!this.isReady()) return;
-                const prefix = effectiveRedisKeyPrefix();
-                const payload = JSON.stringify({
-                    event: 'count_reset',
-                    totalCount: 0,
-                    recordedAt: new Date().toISOString()
-                });
-                try {
-                    await this.request([
-                        ['LPUSH', `${prefix}:events`, payload],
-                        ['SET', `${prefix}:count`, '0'],
-                        ['SET', `${prefix}:updatedAt`, new Date().toISOString()]
-                    ], true);
-                    this.setStatus('ok', 'Reset synced');
-                } catch (err) {
-                    console.warn('Upstash reset sync failed:', err);
-                    this.setStatus('error', this.friendlyRedisError(err.message));
-                }
-            },
-
-            bindEvents() {
-                if (!elements.redisEnableToggle) return;
-
-                const persist = () => {
-                    this.readFormIntoState();
-                };
-
-                elements.redisEnableToggle.addEventListener('change', persist);
-                elements.redisRestUrl.addEventListener('change', persist);
-                elements.redisRestToken.addEventListener('change', persist);
-                elements.redisRestUrl.addEventListener('input', persist);
-                elements.redisRestToken.addEventListener('input', persist);
-                elements.redisKeyPrefix.addEventListener('change', persist);
-                elements.redisKeyPrefix.addEventListener('input', () => this.updateKeyPrefixPreview());
-                elements.redisLineNumber.addEventListener('change', () => {
-                    persist();
-                    loadLocalStorage();
-                });
-                elements.redisLineNumber.addEventListener('input', () => {
-                    this.updateKeyPrefixPreview();
-                    persist();
-                });
-
-                elements.redisTestBtn.addEventListener('click', async () => {
-                    this.readFormIntoState();
-                    await this.syncFromDashboard();
-                    this.applyConfigToForm();
-                    if (!state.upstash.restUrl || !state.upstash.restToken) {
-                        alert('Configure Upstash on dashboard.html and Save, or open this counter from the dashboard “Open counter” link.');
-                        return;
-                    }
-                    if (!resolvedLineNumber()) {
-                        alert('Enter a line number (1, 2, 3…) so this counter uses its own Upstash keys.');
-                        return;
-                    }
-                    this.setStatus('busy', 'Testing…');
-                    try {
-                        const pong = await this.ping();
-                        this.setStatus('busy', 'Checking write access…');
-                        await this.verifyWriteAccess();
-                        this.setStatus('ok', pong === 'PONG' ? 'Connected — write OK' : `Connected (${pong}) — write OK`);
-                    } catch (err) {
-                        this.setStatus('error', this.friendlyRedisError(err.message));
-                    }
-                });
-
-                if (elements.redisRefreshFromDashboardBtn) {
-                    elements.redisRefreshFromDashboardBtn.addEventListener('click', async () => {
-                        this.readFormIntoState();
-                        this.setStatus('busy', 'Pulling…');
-                        await this.syncFromDashboard();
-                        this.applyConfigToForm();
-                        this.startDashboardTargetPolling();
-                    });
-                }
-
-                if (elements.redisUseDashboardToggle) {
-                    elements.redisUseDashboardToggle.addEventListener('change', () => {
-                        persist();
-                        if (elements.redisUseDashboardToggle.checked) {
-                            this.syncFromDashboard().then(() => this.applyConfigToForm());
-                        }
-                    });
-                }
-            }
-        };
-
-        const SettingsPanel = {
-            open() {
-                elements.settingsOffcanvas.classList.add('settings-open');
-                elements.settingsBackdrop.classList.add('settings-open');
-                elements.settingsOffcanvas.setAttribute('aria-hidden', 'false');
-                elements.settingsBackdrop.setAttribute('aria-hidden', 'false');
-                document.body.classList.add('overflow-hidden');
-                if (window.lucide) lucide.createIcons({ root: elements.settingsOffcanvas });
-            },
-            close() {
-                elements.settingsOffcanvas.classList.remove('settings-open');
-                elements.settingsBackdrop.classList.remove('settings-open');
-                elements.settingsOffcanvas.setAttribute('aria-hidden', 'true');
-                elements.settingsBackdrop.setAttribute('aria-hidden', 'true');
-                document.body.classList.remove('overflow-hidden');
-            },
-            bind() {
-                elements.settingsOpenBtn.addEventListener('click', () => this.open());
-                elements.settingsCloseBtn.addEventListener('click', () => this.close());
-                elements.settingsBackdrop.addEventListener('click', () => this.close());
-                window.addEventListener('keydown', (e) => {
-                    if (e.key === 'Escape' && elements.settingsOffcanvas.classList.contains('settings-open')) {
-                        this.close();
-                    }
-                });
-            }
+            passkeySettingsImportInput: document.getElementById('passkeySettingsImportInput')
         };
 
         const PASSKEY_STORAGE_KEY = 'packtracker_passkey';
@@ -1457,7 +735,6 @@
             },
 
             show(mode = 'login') {
-                stopCamera();
                 elements.passkeyGate.classList.remove('hidden');
                 this.clearError();
                 if (window.lucide) lucide.createIcons({ root: elements.passkeyGate });
@@ -1517,14 +794,12 @@
                     }
                     await appBootPromise;
                     appBooted = true;
-                } else if (!state.isCameraActive) {
-                    await startCamera(state.currentDeviceId || null);
                 }
             },
 
             async lock() {
                 PasskeyAuth.clearSession();
-                stopCamera();
+                if (state.isCameraActive) stopCamera();
                 if (PasskeyAuth.loadConfig()) {
                     this.show('login');
                 } else {
@@ -1734,58 +1009,6 @@
             }
         }
 
-        function modeDisplayLabel() {
-            return state.mode === 'qr_only' ? 'QR/Barcode Scanner' : 'Box Counter';
-        }
-
-        function applyDetectionMode(mode, { save = false } = {}) {
-            state.mode = mode === 'qr_only' ? 'qr_only' : 'box_only';
-            resetBarcodeEngine();
-            state.prevFrameImageData = null;
-
-            document.querySelectorAll('.mode-btn').forEach(b => {
-                const active = b.dataset.mode === state.mode;
-                b.classList.toggle('bg-emerald-600', active);
-                b.classList.toggle('border-emerald-500', active);
-                b.classList.toggle('text-white', active);
-                b.classList.toggle('shadow-lg', active);
-                b.classList.toggle('shadow-emerald-900/30', active);
-                b.classList.toggle('bg-slate-900/60', !active);
-                b.classList.toggle('border-slate-700', !active);
-                b.classList.toggle('text-slate-300', !active);
-            });
-
-            const motionGroup = document.getElementById('motionControlsGroup');
-            if (motionGroup) {
-                const qr = state.mode === 'qr_only';
-                motionGroup.style.opacity = qr ? '0.4' : '1';
-                motionGroup.style.pointerEvents = qr ? 'none' : 'auto';
-            }
-
-            if (state.mode === 'qr_only') {
-                startQrScanLoop();
-            } else {
-                stopQrScanLoop();
-            }
-
-            updateSystemStatusText();
-            if (save) saveToLocalStorage();
-        }
-
-        function updateSystemStatusText() {
-            if (!elements.statusText) return;
-            const label = modeDisplayLabel();
-            if (state.isCameraActive) {
-                elements.statusText.innerText = `System Active — ${label}`;
-                return;
-            }
-            const t = elements.statusText.innerText;
-            if (t === 'Connecting Camera...' || t === 'Camera Access Failed' || t.startsWith('Initializing')) {
-                return;
-            }
-            elements.statusText.innerText = `Camera Stopped — ${label}`;
-        }
-
         function updateCameraToggleUI() {
             const active = state.isCameraActive;
             elements.toggleCameraBtn.title = active ? 'Stop Camera' : 'Start Camera';
@@ -1795,29 +1018,12 @@
             if (window.lucide) lucide.createIcons({ root: elements.toggleCameraBtn });
         }
 
-        function isCameraAllowed() {
-            return elements.passkeyGate.classList.contains('hidden');
-        }
-
         function stopCamera() {
-            stopQrScanLoop();
-            if (state.animationFrameId != null) {
-                cancelAnimationFrame(state.animationFrameId);
-                state.animationFrameId = null;
-            }
             if (window.currentStream) {
-                window.currentStream.getTracks().forEach(track => {
-                    track.stop();
-                });
+                window.currentStream.getTracks().forEach(track => track.stop());
                 window.currentStream = null;
             }
-            elements.webcamVideo.pause();
             elements.webcamVideo.srcObject = null;
-            try {
-                elements.webcamVideo.load();
-            } catch (e) {
-                /* ignore */
-            }
             state.isCameraActive = false;
             state.torchOn = false;
 
@@ -1825,6 +1031,7 @@
             elements.toggleTorchBtn.classList.remove('text-amber-400');
             elements.toggleTorchBtn.classList.add('text-slate-400');
 
+            elements.statusText.innerText = 'Camera Stopped';
             elements.statusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-500';
             elements.statusPing.classList.add('hidden');
 
@@ -1833,14 +1040,9 @@
             ctx.fillRect(0, 0, canvas.width || 640, canvas.height || 480);
 
             updateCameraToggleUI();
-            elements.statusText.innerText = `Camera Stopped — ${modeDisplayLabel()}`;
         }
 
         async function startCamera(deviceId = null) {
-            if (!isCameraAllowed()) {
-                return;
-            }
-
             if (window.currentStream) {
                 window.currentStream.getTracks().forEach(track => track.stop());
             }
@@ -1861,9 +1063,8 @@
                 await elements.webcamVideo.play();
 
                 state.isCameraActive = true;
-                updateSystemStatusText();
+                elements.statusText.innerText = "System Active";
                 elements.statusDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500";
-                elements.statusPing.classList.add('hidden');
 
                 const track = stream.getVideoTracks()[0];
                 const capabilities = track.getCapabilities ? track.getCapabilities() : {};
@@ -1872,16 +1073,11 @@
                 await populateCameraList();
                 updateCameraToggleUI();
                 requestAnimationFrame(processFrame);
-                if (state.mode === 'qr_only') {
-                    startQrScanLoop();
-                }
             } catch (err) {
                 console.error("Camera access error:", err);
                 state.isCameraActive = false;
-                stopQrScanLoop();
                 elements.statusText.innerText = "Camera Access Failed";
                 elements.statusDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500";
-                elements.statusPing.classList.add('hidden');
                 updateCameraToggleUI();
             }
         }
@@ -1935,6 +1131,10 @@
                 elements.liveMotionBar.style.width = '0%';
                 elements.liveMotionText.innerText = 'N/A';
                 state.trackedObject = null;
+            }
+
+            if (state.mode === 'qr_only') {
+                await detectBarcode(video);
             }
 
             drawRoiOverlay(width, height);
@@ -2132,125 +1332,44 @@
             }
         }
 
-        function withTimeout(promise, ms) {
-            return Promise.race([
-                promise,
-                new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error('scan timeout')), ms);
-                })
-            ]);
-        }
-
-        function getBarcodeDecodeCanvas() {
-            if (!state.barcodeDecodeCanvas) {
-                state.barcodeDecodeCanvas = document.createElement('canvas');
-            }
-            return state.barcodeDecodeCanvas;
-        }
-
-        function snapshotVideoForDecode(maxWidth = 640) {
-            const video = elements.webcamVideo;
-            if (!video.videoWidth || !video.videoHeight) return null;
-            const scale = Math.min(1, maxWidth / video.videoWidth);
-            const w = Math.max(1, Math.floor(video.videoWidth * scale));
-            const h = Math.max(1, Math.floor(video.videoHeight * scale));
-            const canvas = getBarcodeDecodeCanvas();
-            if (canvas.width !== w || canvas.height !== h) {
-                canvas.width = w;
-                canvas.height = h;
-            }
-            const dctx = canvas.getContext('2d', { willReadFrequently: true });
-            dctx.drawImage(video, 0, 0, w, h);
-            return canvas;
-        }
-
-        function stopQrScanLoop() {
-            if (state.qrScanIntervalId != null) {
-                clearInterval(state.qrScanIntervalId);
-                state.qrScanIntervalId = null;
-            }
-            state.barcodeScanInFlight = false;
-            if (state.zxingReader && typeof state.zxingReader.reset === 'function') {
-                try {
-                    state.zxingReader.reset();
-                } catch (e) {
-                    console.warn('ZXing reset failed', e);
-                }
-            }
-        }
-
-        function startQrScanLoop() {
-            stopQrScanLoop();
-            if (state.mode !== 'qr_only' || !state.isCameraActive) return;
-
-            state.qrScanIntervalId = setInterval(() => {
-                if (state.mode !== 'qr_only' || !state.isCameraActive || state.barcodeScanInFlight) {
-                    return;
-                }
-                state.barcodeScanInFlight = true;
-                detectBarcode()
-                    .catch(() => {})
-                    .finally(() => {
-                        state.barcodeScanInFlight = false;
-                    });
-            }, 350);
-        }
-
-        function resetBarcodeEngine() {
-            stopQrScanLoop();
-        }
-
-        async function detectBarcode() {
-            if (state.mode !== 'qr_only') return;
-
-            const video = elements.webcamVideo;
-            if (video.paused || video.ended) return;
+        async function detectBarcode(video) {
+            const now = Date.now();
+            if (now - state.lastBarcodeScanTime < 300) return;
 
             let codeFound = null;
-            const scanMs = 280;
 
             if (state.barcodeDetector) {
                 try {
-                    const barcodes = await withTimeout(state.barcodeDetector.detect(video), scanMs);
+                    const barcodes = await state.barcodeDetector.detect(video);
                     if (barcodes.length > 0) {
                         codeFound = barcodes[0].rawValue;
                     }
                 } catch (e) {
-                    /* timeout or no native detect */
+                    // Fallback handled below
                 }
             }
 
             if (!codeFound && state.zxingReader) {
-                const decodeCanvas = snapshotVideoForDecode(640);
-                if (decodeCanvas) {
-                    try {
-                        const result = await withTimeout(
-                            state.zxingReader.decodeFromCanvasElement(decodeCanvas),
-                            scanMs
-                        );
-                        if (result) {
-                            codeFound = result.text;
-                        }
-                    } catch (e) {
-                        /* no code in frame or timeout */
+                try {
+                    const result = await state.zxingReader.decodeFromVideoElement(video);
+                    if (result) {
+                        codeFound = result.text;
                     }
+                } catch (e) {
+                    // Normal when no barcode in view
                 }
             }
 
             if (codeFound && codeFound !== state.lastBarcodeScanned) {
-                const now = Date.now();
-                if (now - state.lastBarcodeScanTime < 300) return;
-
                 state.lastBarcodeScanned = codeFound;
                 state.lastBarcodeScanTime = now;
 
-                if (incrementCount({
+                incrementCount({
                     type: 'Barcode / QR Scan',
                     code: codeFound,
                     mode: 'QR/Bar Only'
-                })) {
-                    AudioEngine.playBeep('qr');
-                }
+                });
+                AudioEngine.playBeep('qr');
             }
         }
 
@@ -2491,26 +1610,15 @@
         }
 
         function triggerBoxCountEvent() {
-            if (!canIncrementCount()) return;
-            if (incrementCount({
+            incrementCount({
                 type: 'Box Motion Count',
                 code: 'N/A',
                 mode: 'Box Only'
-            })) {
-                AudioEngine.playBeep('box');
-            }
+            });
+            AudioEngine.playBeep('box');
         }
 
         function incrementCount(metadata = {}) {
-            if (!canIncrementCount()) {
-                showDetectionOverlay(
-                    state.lineTargetCap > 0
-                        ? `LINE TARGET ${state.lineTargetCap} REACHED`
-                        : 'CANNOT INCREMENT'
-                );
-                return false;
-            }
-
             state.count++;
             if (!state.sessionStartTime) {
                 state.sessionStartTime = Date.now();
@@ -2537,10 +1645,8 @@
             updateCounterUI();
             renderLogs();
             saveToLocalStorage();
-            UpstashSync.pushLogEntry(logItem, 'increment');
 
             showDetectionOverlay(metadata.code && metadata.code !== 'N/A' ? `PACK #${state.count} (${metadata.code})` : `PACK #${state.count} COUNTED!`);
-            return true;
         }
 
         function decrementCount(metadata = {}) {
@@ -2571,7 +1677,6 @@
             updateCounterUI();
             renderLogs();
             saveToLocalStorage();
-            UpstashSync.pushLogEntry(logItem, 'decrement');
 
             showDetectionOverlay(`CORRECTED → ${state.count}`);
         }
@@ -2587,20 +1692,6 @@
         function updateCounterUI() {
             elements.mainCountDisplay.innerText = state.count;
             elements.logCountBadge.innerText = `${state.logs.length} entries`;
-
-            const cap = state.lineTargetCap;
-            if (elements.lineTargetLabel) {
-                if (cap > 0) {
-                    elements.lineTargetLabel.classList.remove('hidden');
-                    elements.lineTargetLabel.textContent = `/ ${cap}`;
-                } else {
-                    elements.lineTargetLabel.classList.add('hidden');
-                }
-            }
-            if (elements.lineTargetStatus) {
-                const reached = isLineTargetReached();
-                elements.lineTargetStatus.classList.toggle('hidden', !reached);
-            }
 
             if (state.sessionStartTime && state.count > 0) {
                 const elapsedMins = (Date.now() - state.sessionStartTime) / 60000;
@@ -2750,9 +1841,6 @@
         }
 
         function setupEventListeners() {
-            SettingsPanel.bind();
-            UpstashSync.bindEvents();
-
             elements.toggleCameraBtn.addEventListener('click', async () => {
                 if (state.isCameraActive) {
                     stopCamera();
@@ -2812,7 +1900,26 @@
 
             document.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    applyDetectionMode(btn.dataset.mode, { save: true });
+                    document.querySelectorAll('.mode-btn').forEach(b => {
+                        b.classList.remove('bg-emerald-600', 'border-emerald-500', 'text-white', 'shadow-lg');
+                        b.classList.add('bg-slate-900/60', 'border-slate-700', 'text-slate-300');
+                    });
+
+                    btn.classList.remove('bg-slate-900/60', 'border-slate-700', 'text-slate-300');
+                    btn.classList.add('bg-emerald-600', 'border-emerald-500', 'text-white', 'shadow-lg');
+
+                    state.mode = btn.dataset.mode;
+                    
+                    const motionGroup = document.getElementById('motionControlsGroup');
+                    if (state.mode === 'qr_only') {
+                        motionGroup.style.opacity = '0.4';
+                        motionGroup.style.pointerEvents = 'none';
+                    } else {
+                        motionGroup.style.opacity = '1';
+                        motionGroup.style.pointerEvents = 'auto';
+                    }
+
+                    saveToLocalStorage();
                 });
             });
 
@@ -2871,13 +1978,12 @@
             });
 
             elements.manualAddBtn.addEventListener('click', () => {
-                if (incrementCount({
+                incrementCount({
                     type: 'Manual Addition',
                     code: 'Manual Override',
                     mode: 'Manual'
-                })) {
-                    AudioEngine.playBeep('box');
-                }
+                });
+                AudioEngine.playBeep('box');
             });
 
             elements.manualSubBtn.addEventListener('click', () => {
@@ -2897,7 +2003,6 @@
                     elements.sessionTimer.innerText = '00:00';
                     updateCounterUI();
                     saveToLocalStorage();
-                    UpstashSync.pushCountReset();
                 }
             });
 
@@ -2915,17 +2020,14 @@
 
         function saveToLocalStorage() {
             try {
-                const payload = JSON.stringify({
+                localStorage.setItem('packtracker_state', JSON.stringify({
                     count: state.count,
                     logs: state.logs,
                     sensitivity: state.sensitivity,
                     minBoxWidth: state.minBoxWidth,
                     mode: state.mode,
-                    countDirection: state.countDirection,
-                    lineNumber: resolvedLineNumber(),
-                    lastAckDashboardResetAt: state.lastAckDashboardResetAt || ''
-                });
-                localStorage.setItem(localStateStorageKey(), payload);
+                    countDirection: state.countDirection
+                }));
             } catch (e) {
                 console.warn('Unable to save to localStorage', e);
             }
@@ -2933,38 +2035,34 @@
 
         function loadLocalStorage() {
             try {
-                const line = resolvedLineNumber();
-                let saved = localStorage.getItem(localStateStorageKey());
-                if (!saved && line === '1') {
-                    saved = localStorage.getItem('packtracker_state');
+                const saved = localStorage.getItem('packtracker_state');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    state.count = parsed.count || 0;
+                    state.logs = parsed.logs || [];
+                    state.sensitivity = parsed.sensitivity || 18;
+                    state.minBoxWidth = parsed.minBoxWidth || 40;
+                    state.mode = parsed.mode === 'box_and_qr' ? 'box_only' : (parsed.mode || 'box_only');
+                    state.countDirection = parsed.countDirection || 'any';
+
+                    elements.sensitivitySlider.value = state.sensitivity;
+                    elements.sensitivityValue.innerText = `${state.sensitivity}%`;
+                    elements.thresholdMarker.style.left = `${state.sensitivity}%`;
+
+                    elements.minBoxSizeSlider.value = state.minBoxWidth;
+                    elements.minBoxSizeValue.innerText = `${state.minBoxWidth}px`;
+
+                    elements.directionSelect.value = state.countDirection;
+
+                    document.querySelectorAll('.mode-btn').forEach(btn => {
+                        if (btn.dataset.mode === state.mode) {
+                            btn.click();
+                        }
+                    });
+
+                    updateCounterUI();
+                    renderLogs();
                 }
-                if (!saved) {
-                    applyDetectionMode(state.mode);
-                    return;
-                }
-
-                const parsed = JSON.parse(saved);
-                state.count = parsed.count || 0;
-                state.logs = parsed.logs || [];
-                state.sensitivity = parsed.sensitivity || 18;
-                state.minBoxWidth = parsed.minBoxWidth || 40;
-                state.mode = parsed.mode === 'box_and_qr' ? 'box_only' : (parsed.mode || 'box_only');
-                state.countDirection = parsed.countDirection || 'any';
-                state.lastAckDashboardResetAt = parsed.lastAckDashboardResetAt || '';
-
-                elements.sensitivitySlider.value = state.sensitivity;
-                elements.sensitivityValue.innerText = `${state.sensitivity}%`;
-                elements.thresholdMarker.style.left = `${state.sensitivity}%`;
-
-                elements.minBoxSizeSlider.value = state.minBoxWidth;
-                elements.minBoxSizeValue.innerText = `${state.minBoxWidth}px`;
-
-                elements.directionSelect.value = state.countDirection;
-
-                applyDetectionMode(state.mode);
-
-                updateCounterUI();
-                renderLogs();
             } catch (e) {
                 console.warn('Unable to load from localStorage', e);
             }
@@ -2995,8 +2093,21 @@
             manifestLink.href = manifestUrl;
             document.head.appendChild(manifestLink);
 
-            if ('serviceWorker' in navigator && window.isSecureContext) {
-                const swUrl = new URL('sw.js', window.location.href);
+            if ('serviceWorker' in navigator) {
+                const swCode = `
+                    const CACHE_NAME = 'packtracker-cache-v1';
+                    self.addEventListener('install', e => self.skipWaiting());
+                    self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+                    self.addEventListener('fetch', e => {
+                        e.respondWith(
+                            fetch(e.request).catch(() => caches.match(e.request))
+                        );
+                    });
+                `;
+
+                const swBlob = new Blob([swCode], { type: 'application/javascript' });
+                const swUrl = URL.createObjectURL(swBlob);
+
                 navigator.serviceWorker.register(swUrl)
                     .then(() => {
                         elements.pwaBadge.classList.remove('hidden');
@@ -3025,11 +2136,7 @@
         }
 
         async function bootApplication() {
-            UpstashSync.loadConfig();
-            await UpstashSync.syncFromDashboard();
-            UpstashSync.applyConfigToForm();
             loadLocalStorage();
-            UpstashSync.startDashboardTargetPolling();
             setupEventListeners();
             setupRoiInteractions();
 
@@ -3043,7 +2150,6 @@
 
         // Initialize Application (after passkey gate when configured)
         window.addEventListener('load', async () => {
-            if (window.PackTrackerTheme) PackTrackerTheme.initSelect();
             if (window.lucide) lucide.createIcons();
             await PasskeyGate.init();
         });

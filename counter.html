@@ -1736,6 +1736,34 @@
             return state.mode === 'qr_only' ? 'QR/Barcode Scanner' : 'Box Counter';
         }
 
+        function applyDetectionMode(mode, { save = false } = {}) {
+            state.mode = mode === 'qr_only' ? 'qr_only' : 'box_only';
+            resetBarcodeEngine();
+            state.prevFrameImageData = null;
+
+            document.querySelectorAll('.mode-btn').forEach(b => {
+                const active = b.dataset.mode === state.mode;
+                b.classList.toggle('bg-emerald-600', active);
+                b.classList.toggle('border-emerald-500', active);
+                b.classList.toggle('text-white', active);
+                b.classList.toggle('shadow-lg', active);
+                b.classList.toggle('shadow-emerald-900/30', active);
+                b.classList.toggle('bg-slate-900/60', !active);
+                b.classList.toggle('border-slate-700', !active);
+                b.classList.toggle('text-slate-300', !active);
+            });
+
+            const motionGroup = document.getElementById('motionControlsGroup');
+            if (motionGroup) {
+                const qr = state.mode === 'qr_only';
+                motionGroup.style.opacity = qr ? '0.4' : '1';
+                motionGroup.style.pointerEvents = qr ? 'none' : 'auto';
+            }
+
+            updateSystemStatusText();
+            if (save) saveToLocalStorage();
+        }
+
         function updateSystemStatusText() {
             if (!elements.statusText) return;
             const label = modeDisplayLabel();
@@ -2720,29 +2748,7 @@
 
             document.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    document.querySelectorAll('.mode-btn').forEach(b => {
-                        b.classList.remove('bg-emerald-600', 'border-emerald-500', 'text-white', 'shadow-lg');
-                        b.classList.add('bg-slate-900/60', 'border-slate-700', 'text-slate-300');
-                    });
-
-                    btn.classList.remove('bg-slate-900/60', 'border-slate-700', 'text-slate-300');
-                    btn.classList.add('bg-emerald-600', 'border-emerald-500', 'text-white', 'shadow-lg');
-
-                    state.mode = btn.dataset.mode;
-                    resetBarcodeEngine();
-                    state.prevFrameImageData = null;
-
-                    const motionGroup = document.getElementById('motionControlsGroup');
-                    if (state.mode === 'qr_only') {
-                        motionGroup.style.opacity = '0.4';
-                        motionGroup.style.pointerEvents = 'none';
-                    } else {
-                        motionGroup.style.opacity = '1';
-                        motionGroup.style.pointerEvents = 'auto';
-                    }
-
-                    updateSystemStatusText();
-                    saveToLocalStorage();
+                    applyDetectionMode(btn.dataset.mode, { save: true });
                 });
             });
 
@@ -2868,7 +2874,10 @@
                 if (!saved && line === '1') {
                     saved = localStorage.getItem('packtracker_state');
                 }
-                if (!saved) return;
+                if (!saved) {
+                    applyDetectionMode(state.mode);
+                    return;
+                }
 
                 const parsed = JSON.parse(saved);
                 state.count = parsed.count || 0;
@@ -2888,11 +2897,7 @@
 
                 elements.directionSelect.value = state.countDirection;
 
-                document.querySelectorAll('.mode-btn').forEach(btn => {
-                    if (btn.dataset.mode === state.mode) {
-                        btn.click();
-                    }
-                });
+                applyDetectionMode(state.mode);
 
                 updateCounterUI();
                 renderLogs();

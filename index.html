@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full theme-root" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PackTracker — Box counting & live dashboard</title>
+    <meta name="theme-color" content="#0f172a">
+    <meta name="description" content="Multi-line box counter with camera detection and live Upstash dashboard">
+    <script src="dashboard-theme.js"></script>
+    <link rel="stylesheet" href="dashboard-themes.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .landing-hero {
+            background: radial-gradient(ellipse 80% 60% at 50% -10%, color-mix(in srgb, var(--dash-accent) 22%, transparent), transparent);
+        }
+        .landing-card {
+            background: var(--dash-card);
+            border: 1px solid var(--dash-border);
+            border-radius: 1rem;
+            box-shadow: 0 8px 32px color-mix(in srgb, var(--dash-text) 8%, transparent);
+        }
+        .landing-btn-primary {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: #fff;
+            border: 1px solid color-mix(in srgb, #10b981 60%, #000);
+        }
+        .landing-btn-primary:hover {
+            filter: brightness(1.08);
+        }
+        .landing-btn-secondary {
+            background: color-mix(in srgb, var(--dash-accent) 12%, var(--dash-surface));
+            color: var(--dash-text);
+            border: 1px solid var(--dash-border);
+        }
+        .landing-btn-secondary:hover {
+            background: color-mix(in srgb, var(--dash-accent) 20%, var(--dash-surface));
+        }
+        [data-theme="light"] .text-slate-100,
+        [data-theme="light"] .text-slate-200,
+        [data-theme="light"] .text-slate-300 {
+            color: var(--dash-text) !important;
+        }
+        [data-theme="light"] .text-slate-400,
+        [data-theme="light"] .text-slate-500 {
+            color: var(--dash-muted) !important;
+        }
+    </style>
+</head>
+<body class="dash-body min-h-full flex flex-col font-sans antialiased selection:theme">
+    <main class="landing-hero flex-1 flex flex-col items-center justify-center px-4 py-12 sm:py-16">
+        <div class="landing-card max-w-lg w-full p-8 sm:p-10 text-center">
+            <div class="dash-header-icon inline-flex p-3 rounded-2xl mb-5">
+                <i data-lucide="package-check" class="w-10 h-10"></i>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight dash-text mb-2">PackTracker</h1>
+            <p class="text-sm sm:text-base dash-muted leading-relaxed mb-8 max-w-sm mx-auto">
+                Count boxes on the line with your camera, sync to Redis, and watch every belt on one dashboard.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                <a href="dashboard.html"
+                    class="landing-btn-primary inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition shadow-lg">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                    Open dashboard
+                </a>
+                <a href="counter.html?line=1"
+                    class="landing-btn-secondary inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition">
+                    <i data-lucide="camera" class="w-4 h-4"></i>
+                    Open counter
+                </a>
+            </div>
+            <p class="text-[11px] dash-muted mt-6 leading-relaxed">
+                Each counter device needs its own line — use <code class="text-xs opacity-80">counter.html?line=2</code> for line 2.
+            </p>
+        </div>
+    </main>
+    <footer class="py-4 text-center text-[11px] dash-muted border-t border-[color:var(--dash-border)]">
+        Family Food Pack · counts stay in your browser &amp; Upstash
+    </footer>
+    <script>
+        window.addEventListener('load', () => {
+            if (window.PackTrackerTheme) PackTrackerTheme.initSelect?.();
+            if (window.lucide) lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

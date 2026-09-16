@@ -1,0 +1,8 @@
+{
+  "name": "packtracker",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-dist.mjs",
+    "build:dist": "node scripts/build-dist.mjs"
+  }
+}

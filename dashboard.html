@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full theme-root" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PackTracker Dashboard — Multi-Line</title>
+    <meta name="theme-color" content="#0f172a">
+    <meta name="description" content="Live box counts from multiple PackTracker counter lines">
+    <script src="dashboard-theme.js"></script>
+    <link rel="stylesheet" href="dashboard-themes.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        #settingsPanel.settings-open { transform: translateX(0); }
+        #settingsBackdrop.settings-open { opacity: 1; pointer-events: auto; }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .progress-shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2.5s infinite;
+        }
+        #lineGrid {
+            display: grid;
+            gap: 1rem;
+            width: 100%;
+            align-items: stretch;
+        }
+        #lineGrid.line-grid--single {
+            grid-template-columns: minmax(0, 22rem);
+            justify-content: center;
+        }
+        #lineGrid .line-grid-placeholder {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+<body class="dash-body min-h-full flex flex-col font-sans antialiased selection:theme">
+
+    <div id="passkeyGate" class="dash-gate fixed inset-0 z-[100] backdrop-blur flex items-center justify-center p-4">
+        <div class="dash-gate-panel max-w-md w-full rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
+            <div class="flex items-center gap-3">
+                <div class="dash-header-icon p-2.5 rounded-xl">
+                    <i data-lucide="key-round" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h2 id="passkeyGateTitle" class="font-bold text-lg text-slate-100">Unlock PackTracker</h2>
+                    <p id="passkeyGateSubtitle" class="text-xs text-slate-400 mt-0.5">Sign in with your device passkey</p>
+                </div>
+            </div>
+            <p id="passkeyGateHint" class="text-xs text-slate-400 leading-relaxed">
+                Passkeys are verified on this device only. Uses the same config as <code class="text-slate-500">counter.html</code> on this site.
+            </p>
+            <p id="passkeyGateError" class="hidden text-xs text-rose-300 bg-rose-950/40 border border-rose-800/60 rounded-lg px-3 py-2"></p>
+            <div class="flex flex-col gap-2">
+                <button type="button" id="passkeyPrimaryBtn" class="w-full py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2">
+                    <i data-lucide="fingerprint" class="w-4 h-4"></i>
+                    <span id="passkeyPrimaryBtnLabel">Sign in with passkey</span>
+                </button>
+                <button type="button" id="passkeySkipBtn" class="hidden w-full py-2 text-slate-400 hover:text-slate-200 text-xs font-medium transition">
+                    Continue without passkey
+                </button>
+            </div>
+            <div id="passkeyBackupRow" class="hidden pt-2 border-t border-slate-700/60 flex flex-wrap gap-2">
+                <button type="button" id="passkeyImportBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-slate-900/80 hover:bg-slate-700/50 border border-slate-600 text-slate-300 text-xs font-medium rounded-lg transition">
+                    Import config file
+                </button>
+                <button type="button" id="passkeyExportBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-slate-900/80 hover:bg-slate-700/50 border border-slate-600 text-slate-300 text-xs font-medium rounded-lg transition">
+                    Export config file
+                </button>
+            </div>
+            <input type="file" id="passkeyImportInput" accept="application/json,.json" class="hidden">
+        </div>
+    </div>
+
+    <header class="dash-header sticky top-0 z-30 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="dash-header-icon p-2 rounded-xl shrink-0">
+                    <i data-lucide="layout-dashboard" class="w-6 h-6"></i>
+                </div>
+                <div class="min-w-0">
+                    <h1 class="font-bold text-lg leading-tight tracking-wide truncate dash-text">PackTracker Dashboard</h1>
+                    <p class="text-xs dash-muted truncate">Counts from <code class="opacity-80">counter.html</code> via Upstash</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <button id="passkeyLockBtn" type="button" title="Lock dashboard" class="hidden p-2 text-slate-400 hover:text-amber-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition">
+                    <i data-lucide="lock" class="w-5 h-5"></i>
+                </button>
+                <span id="sheetSyncBadge" class="hidden text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-600 text-slate-500 bg-slate-900/60">Sheet off</span>
+                <span id="connectionBadge" class="text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-600 text-slate-500 bg-slate-900/60">Not connected</span>
+                <button type="button" id="resetCountersBtn" class="hidden sm:flex items-center gap-1.5 py-1.5 px-2.5 text-[11px] font-semibold text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/60 rounded-lg transition" title="Clear all line counts in Upstash">
+                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                    Reset counters
+                </button>
+                <button type="button" id="settingsOpenBtn" class="p-2 text-slate-400 hover:text-cyan-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition" title="Settings">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-5 space-y-6">
+        <!-- Overall summary -->
+        <section class="dash-card p-5 sm:p-6 dash-total-block">
+            <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-4">
+                <div>
+                    <p class="text-xs dash-muted uppercase tracking-wider font-semibold mb-1">Total progress</p>
+                    <p class="tabular-nums tracking-tight flex flex-wrap items-baseline">
+                        <span id="totalCount" class="count-total">0</span>
+                        <span class="count-sep">/</span>
+                        <span id="totalTargetDisplay" class="count-target">0</span>
+                    </p>
+                    <p id="totalRemaining" class="text-sm dash-muted mt-1">Configure target in settings</p>
+                </div>
+                <div class="text-right text-xs dash-muted">
+                    <p>Last refresh: <span id="lastRefresh" class="font-mono dash-text">—</span></p>
+                    <p class="mt-0.5"><span id="lineCountLabel">0</span> lines · poll <span id="pollIntervalLabel">3</span>s</p>
+                </div>
+            </div>
+            <div class="dash-progress-track relative">
+                <div id="totalProgressBar" class="dash-progress-fill relative overflow-hidden" style="width: 0%">
+                    <div class="absolute inset-0 progress-shimmer pointer-events-none"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Per-line cards -->
+        <section>
+            <h2 class="text-sm font-semibold dash-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+                <i data-lucide="git-branch" class="w-4 h-4" style="color: var(--dash-accent)"></i>
+                Production lines
+            </h2>
+            <div id="lineGrid">
+                <p class="line-grid-placeholder dash-muted text-sm py-8 text-center border border-dashed rounded-xl" style="border-color: var(--dash-border)">Open settings to connect Upstash and set lines + target.</p>
+            </div>
+        </section>
+    </main>
+
+    <div id="settingsBackdrop" class="fixed inset-0 bg-black/50 opacity-0 pointer-events-none transition-opacity z-40"></div>
+    <aside id="settingsPanel" class="dash-settings fixed top-0 right-0 h-full w-full max-w-md border-l shadow-2xl z-50 transform translate-x-full transition-transform duration-300 overflow-y-auto">
+        <div class="sticky top-0 backdrop-blur border-b px-4 py-3 flex items-center justify-between" style="background: var(--dash-surface); border-color: var(--dash-border)">
+            <h2 class="font-semibold dash-text flex items-center gap-2">
+                <i data-lucide="sliders-horizontal" class="w-4 h-4" style="color: var(--dash-accent)"></i>
+                Dashboard setup
+            </h2>
+            <button type="button" id="settingsCloseBtn" class="p-2 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-4 space-y-4 text-xs">
+            <div class="space-y-2">
+                <label for="themeSelect" class="block dash-muted font-medium">Theme</label>
+                <select id="themeSelect" class="w-full rounded-lg px-2.5 py-2 text-xs focus:ring-1 focus:outline-none"></select>
+            </div>
+            <p class="text-[11px] dash-muted leading-relaxed">
+                Each <strong class="text-slate-400">counter.html</strong> instance should use the same Upstash database, matching <strong class="text-slate-400">key prefix (base)</strong>, and its own <strong class="text-slate-400">line number</strong> (1, 2, …). This page reads <code class="text-slate-400">{base}_line_N:count</code> (e.g. <code class="text-slate-400">packtracker_line_1:count</code>).
+            </p>
+            <label class="flex items-start gap-2 cursor-pointer text-[11px] text-slate-400">
+                <input type="checkbox" id="publishUpstashForCounters" class="mt-0.5 rounded border-slate-600" checked>
+                <span>Publish Upstash URL, token, and key prefix to Redis for <strong class="text-slate-300">counter.html</strong> devices (anyone with Redis read access can read them — use only on trusted networks).</span>
+            </label>
+
+            <div class="space-y-2">
+                <label for="restUrl" class="block text-slate-400 font-medium">REST URL</label>
+                <input type="url" id="restUrl" autocomplete="off" placeholder="https://xxx.upstash.io" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+            </div>
+            <div class="space-y-2">
+                <label for="restToken" class="block text-slate-400 font-medium">REST token</label>
+                <input type="password" id="restToken" autocomplete="off" placeholder="AX…" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+                <p class="text-[10px] text-slate-500">Read-only token works for live view. <strong class="text-slate-400">Reset counters</strong> needs a Standard (write) token.</p>
+            </div>
+            <div class="space-y-2">
+                <label for="keyPrefixBase" class="block text-slate-400 font-medium">Key prefix (base)</label>
+                <input type="text" id="keyPrefixBase" value="packtracker" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-2">
+                    <label for="totalTarget" class="block text-slate-400 font-medium">Total target boxes</label>
+                    <input type="number" id="totalTarget" min="0" step="1" value="0" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+                </div>
+                <div class="space-y-2">
+                    <label for="lineCount" class="block text-slate-400 font-medium">Lines to monitor</label>
+                    <input type="number" id="lineCount" min="2" max="24" step="1" value="2" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <label for="pollSeconds" class="block text-slate-400 font-medium">Refresh interval (seconds)</label>
+                <input type="number" id="pollSeconds" min="1" max="60" step="1" value="3" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+            </div>
+
+            <div id="targetSplitPreview" class="bg-slate-950/60 border border-slate-700/60 rounded-xl p-3 font-mono text-[11px] text-slate-400 leading-relaxed"></div>
+
+            <div class="flex flex-wrap gap-2 pt-1">
+                <button type="button" id="saveSettingsBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition">Save &amp; refresh</button>
+                <button type="button" id="testConnectionBtn" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-semibold rounded-lg transition">Test</button>
+            </div>
+            <p id="settingsMessage" class="text-[11px] text-slate-500 min-h-[1rem]"></p>
+
+            <button type="button" id="importCounterCredsBtn" class="w-full py-2 px-3 bg-slate-800/80 hover:bg-slate-700/50 border border-slate-600 text-slate-300 text-xs font-medium rounded-lg transition">
+                Copy Upstash settings from this browser’s counter
+            </button>
+
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="font-medium flex items-center gap-1.5">
+                        <i data-lucide="sheet" class="w-4 h-4 text-green-400"></i> Google Sheet sync
+                    </span>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" id="sheetEnableToggle" class="sr-only peer">
+                        <div class="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
+                    </label>
+                </div>
+                <p class="text-[11px] text-slate-500 leading-relaxed">
+                    The dashboard only stores your <strong class="text-slate-400">Apps Script Web App URL</strong> (<code class="text-slate-400">…/exec</code>) — not your Google account or Sheet link. The script runs inside your spreadsheet.
+                </p>
+                <div class="space-y-2">
+                    <label for="sheetWebAppUrl" class="block text-slate-400 font-medium">Web app URL</label>
+                    <input type="url" id="sheetWebAppUrl" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono text-[11px] focus:ring-1 focus:ring-green-500 focus:outline-none">
+                </div>
+                <div class="space-y-2">
+                    <label for="sheetSharedSecret" class="block text-slate-400 font-medium">Shared secret (optional)</label>
+                    <input type="password" id="sheetSharedSecret" autocomplete="off" placeholder="Same as SCRIPT_SECRET in Apps Script" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-green-500 focus:outline-none">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" id="sheetTestPostBtn" class="py-1.5 px-3 bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/40 rounded-lg font-semibold transition">Test post</button>
+                </div>
+                <p id="sheetSyncHint" class="text-[10px] text-slate-500 min-h-[1rem]">Posts when line counts change after each refresh.</p>
+                <details class="text-[11px] text-slate-400 group">
+                    <summary class="cursor-pointer text-slate-300 font-medium hover:text-green-300">Google Sheet setup instructions</summary>
+                    <ol class="list-decimal list-inside space-y-1.5 mt-2 text-slate-500 leading-relaxed pl-0.5">
+                        <li>Create a Google Sheet → <strong class="text-slate-400">Extensions → Apps Script</strong>.</li>
+                        <li>Paste the project script from <code class="text-slate-400">google-sheet/Code.gs</code> in this repo (see also <code class="text-slate-400">google-sheet/SETUP.md</code>).</li>
+                        <li>Optional: set <code class="text-slate-400">SCRIPT_SECRET</code> in the script and the same value below. Leave both empty to test.</li>
+                        <li>After code changes, deploy a <strong class="text-slate-400">New version</strong> of the web app or posts may not run updated code.</li>
+                        <li>Run <code class="text-slate-400">initializeSheets</code> once (approve permissions).</li>
+                        <li><strong class="text-slate-400">Deploy → New deployment → Web app</strong>: Execute as <em>Me</em>, access <em>Anyone</em>.</li>
+                        <li>Copy the <strong class="text-slate-400">Web app URL</strong> ending in <code class="text-slate-400">/exec</code> into this dashboard.</li>
+                    </ol>
+                    <p class="mt-2 text-slate-500">Sheets created: <strong class="text-slate-400">Live</strong> (latest row) and <strong class="text-slate-400">Log</strong> (append history).</p>
+                </details>
+            </div>
+
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="font-medium flex items-center gap-1.5">
+                        <i data-lucide="key-round" class="w-4 h-4 text-amber-400"></i> Passkey lock
+                    </span>
+                    <span id="passkeyStatusBadge" class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-slate-600 text-slate-400">Off</span>
+                </div>
+                <p id="passkeySettingsHint" class="text-[11px] text-slate-500 leading-relaxed">Same passkey config as the counter app on this domain.</p>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" id="passkeySetupBtn" class="py-1.5 px-3 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 rounded-lg font-semibold transition">
+                        Enable passkey
+                    </button>
+                    <button type="button" id="passkeyRemoveBtn" class="hidden py-1.5 px-3 bg-slate-900/80 hover:bg-rose-900/30 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-700/50 rounded-lg font-semibold transition">
+                        Remove passkey
+                    </button>
+                    <button type="button" id="passkeySettingsExportBtn" class="hidden py-1.5 px-3 bg-slate-900/80 hover:bg-slate-700/50 border border-slate-600 rounded-lg font-semibold transition">
+                        Export
+                    </button>
+                    <button type="button" id="passkeySettingsImportBtn" class="py-1.5 px-3 bg-slate-900/80 hover:bg-slate-700/50 border border-slate-600 rounded-lg font-semibold transition">
+                        Import
+                    </button>
+                </div>
+                <input type="file" id="passkeySettingsImportInput" accept="application/json,.json" class="hidden">
+            </div>
+
+            <div class="pt-3 border-t border-slate-700/60 space-y-2">
+                <p class="text-[11px] text-slate-500">Clears <code class="text-slate-400">:count</code>, <code class="text-slate-400">:events</code>, and <code class="text-slate-400">:updatedAt</code> for every monitored line in Upstash. Counters pick up the reset within ~12s.</p>
+                <button type="button" id="resetCountersSettingsBtn" class="w-full py-2 px-3 bg-rose-950/50 hover:bg-rose-900/40 text-rose-300 border border-rose-800/60 font-semibold rounded-lg transition flex items-center justify-center gap-2">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                    Reset all line counters
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <script>
+        const STORAGE_KEY = 'packtracker_dashboard';
+        const COUNTER_UPSTASH_KEY = 'packtracker_upstash';
+
+        const state = {
+            restUrl: '',
+            restToken: '',
+            keyPrefixBase: 'packtracker',
+            totalTarget: 0,
+            lineCount: 2,
+            pollSeconds: 3,
+            publishUpstashForCounters: true,
+            lines: [],
+            pollTimer: null,
+            fetching: false,
+            sheet: {
+                enabled: false,
+                webAppUrl: '',
+                sharedSecret: ''
+            },
+            lastSheetPostFingerprint: '',
+            sheetPosting: false
+        };
+
+        const el = {
+            sheetSyncBadge: document.getElementById('sheetSyncBadge'),
+            connectionBadge: document.getElementById('connectionBadge'),
+            sheetEnableToggle: document.getElementById('sheetEnableToggle'),
+            sheetWebAppUrl: document.getElementById('sheetWebAppUrl'),
+            sheetSharedSecret: document.getElementById('sheetSharedSecret'),
+            sheetTestPostBtn: document.getElementById('sheetTestPostBtn'),
+            sheetSyncHint: document.getElementById('sheetSyncHint'),
+            totalCount: document.getElementById('totalCount'),
+            totalTargetDisplay: document.getElementById('totalTargetDisplay'),
+            totalRemaining: document.getElementById('totalRemaining'),
+            totalProgressBar: document.getElementById('totalProgressBar'),
+            lastRefresh: document.getElementById('lastRefresh'),
+            lineCountLabel: document.getElementById('lineCountLabel'),
+            pollIntervalLabel: document.getElementById('pollIntervalLabel'),
+            lineGrid: document.getElementById('lineGrid'),
+            settingsOpenBtn: document.getElementById('settingsOpenBtn'),
+            settingsCloseBtn: document.getElementById('settingsCloseBtn'),
+            settingsPanel: document.getElementById('settingsPanel'),
+            settingsBackdrop: document.getElementById('settingsBackdrop'),
+            restUrl: document.getElementById('restUrl'),
+            restToken: document.getElementById('restToken'),
+            keyPrefixBase: document.getElementById('keyPrefixBase'),
+            totalTarget: document.getElementById('totalTarget'),
+            lineCount: document.getElementById('lineCount'),
+            pollSeconds: document.getElementById('pollSeconds'),
+            publishUpstashForCounters: document.getElementById('publishUpstashForCounters'),
+            targetSplitPreview: document.getElementById('targetSplitPreview'),
+            saveSettingsBtn: document.getElementById('saveSettingsBtn'),
+            testConnectionBtn: document.getElementById('testConnectionBtn'),
+            settingsMessage: document.getElementById('settingsMessage'),
+            importCounterCredsBtn: document.getElementById('importCounterCredsBtn'),
+            resetCountersBtn: document.getElementById('resetCountersBtn'),
+            resetCountersSettingsBtn: document.getElementById('resetCountersSettingsBtn'),
+            passkeyGate: document.getElementById('passkeyGate'),
+            passkeyGateTitle: document.getElementById('passkeyGateTitle'),
+            passkeyGateSubtitle: document.getElementById('passkeyGateSubtitle'),
+            passkeyGateHint: document.getElementById('passkeyGateHint'),
+            passkeyGateError: document.getElementById('passkeyGateError'),
+            passkeyPrimaryBtn: document.getElementById('passkeyPrimaryBtn'),
+            passkeyPrimaryBtnLabel: document.getElementById('passkeyPrimaryBtnLabel'),
+            passkeySkipBtn: document.getElementById('passkeySkipBtn'),
+            passkeyBackupRow: document.getElementById('passkeyBackupRow'),
+            passkeyImportBtn: document.getElementById('passkeyImportBtn'),
+            passkeyExportBtn: document.getElementById('passkeyExportBtn'),
+            passkeyImportInput: document.getElementById('passkeyImportInput'),
+            passkeyLockBtn: document.getElementById('passkeyLockBtn'),
+            passkeyStatusBadge: document.getElementById('passkeyStatusBadge'),
+            passkeySettingsHint: document.getElementById('passkeySettingsHint'),
+            passkeySetupBtn: document.getElementById('passkeySetupBtn'),
+            passkeyRemoveBtn: document.getElementById('passkeyRemoveBtn'),
+            passkeySettingsExportBtn: document.getElementById('passkeySettingsExportBtn'),
+            passkeySettingsImportBtn: document.getElementById('passkeySettingsImportBtn'),
+            passkeySettingsImportInput: document.getElementById('passkeySettingsImportInput')
+        };
+
+        const PASSKEY_STORAGE_KEY = 'packtracker_passkey';
+        const PASSKEY_SESSION_KEY = 'packtracker_passkey_session';
+        const PASSKEY_DECLINE_KEY = 'packtracker_passkey_declined';
+
+        const PasskeyAuth = {
+            bufferToBase64url(buffer) {
+                const bytes = new Uint8Array(buffer);
+                let binary = '';
+                bytes.forEach(b => { binary += String.fromCharCode(b); });
+                return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            },
+
+            base64urlToBuffer(base64url) {
+                const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+                const pad = base64.length % 4 ? '='.repeat(4 - (base64.length % 4)) : '';
+                const binary = atob(base64 + pad);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                return bytes;
+            },
+
+            randomBytes(length = 32) {
+                const buf = new Uint8Array(length);
+                crypto.getRandomValues(buf);
+                return buf;
+            },
+
+            isSupported() {
+                return window.isSecureContext && typeof window.PublicKeyCredential !== 'undefined';
+            },
+
+            getRpId() {
+                return window.location.hostname || 'localhost';
+            },
+
+            loadConfig() {
+                try {
+                    const raw = localStorage.getItem(PASSKEY_STORAGE_KEY);
+                    if (!raw) return null;
+                    const parsed = JSON.parse(raw);
+                    if (!parsed?.credentialId || !parsed?.userId) return null;
+                    return parsed;
+                } catch (e) {
+                    return null;
+                }
+            },
+
+            saveConfig(config) {
+                localStorage.setItem(PASSKEY_STORAGE_KEY, JSON.stringify(config));
+            },
+
+            clearConfig() {
+                localStorage.removeItem(PASSKEY_STORAGE_KEY);
+            },
+
+            markSessionUnlocked() {
+                sessionStorage.setItem(PASSKEY_SESSION_KEY, String(Date.now()));
+            },
+
+            isSessionUnlocked() {
+                return sessionStorage.getItem(PASSKEY_SESSION_KEY) != null;
+            },
+
+            clearSession() {
+                sessionStorage.removeItem(PASSKEY_SESSION_KEY);
+            },
+
+            validateConfigObject(obj) {
+                if (!obj || typeof obj !== 'object') return null;
+                if (typeof obj.credentialId !== 'string' || typeof obj.userId !== 'string') return null;
+                return {
+                    credentialId: obj.credentialId,
+                    userId: obj.userId,
+                    createdAt: obj.createdAt || new Date().toISOString()
+                };
+            },
+
+            async registerPasskey() {
+                if (!this.isSupported()) {
+                    throw new Error('Passkeys require HTTPS or localhost in a supported browser.');
+                }
+                const userId = this.randomBytes(32);
+                const challenge = this.randomBytes(32);
+                const rpId = this.getRpId();
+                const credential = await navigator.credentials.create({
+                    publicKey: {
+                        challenge,
+                        rp: { name: 'PackTracker', id: rpId },
+                        user: {
+                            id: userId,
+                            name: 'packtracker-operator',
+                            displayName: 'PackTracker Operator'
+                        },
+                        pubKeyCredParams: [
+                            { alg: -7, type: 'public-key' },
+                            { alg: -257, type: 'public-key' }
+                        ],
+                        authenticatorSelection: {
+                            residentKey: 'preferred',
+                            userVerification: 'required'
+                        },
+                        timeout: 120000,
+                        attestation: 'none'
+                    }
+                });
+                if (!credential?.rawId) {
+                    throw new Error('Passkey creation was cancelled or failed.');
+                }
+                const config = {
+                    credentialId: this.bufferToBase64url(credential.rawId),
+                    userId: this.bufferToBase64url(userId),
+                    createdAt: new Date().toISOString()
+                };
+                this.saveConfig(config);
+                this.markSessionUnlocked();
+                return config;
+            },
+
+            async authenticatePasskey() {
+                if (!this.isSupported()) {
+                    throw new Error('Passkeys require HTTPS or localhost in a supported browser.');
+                }
+                const stored = this.loadConfig();
+                if (!stored) throw new Error('No passkey is configured on this device.');
+                const challenge = this.randomBytes(32);
+                const assertion = await navigator.credentials.get({
+                    publicKey: {
+                        challenge,
+                        rpId: this.getRpId(),
+                        allowCredentials: [{
+                            id: this.base64urlToBuffer(stored.credentialId),
+                            type: 'public-key',
+                            transports: ['internal', 'hybrid', 'usb', 'nfc', 'ble']
+                        }],
+                        userVerification: 'required',
+                        timeout: 120000
+                    }
+                });
+                if (!assertion) throw new Error('Sign-in was cancelled or failed.');
+                this.markSessionUnlocked();
+                return true;
+            },
+
+            async exportConfigToFile() {
+                const config = this.loadConfig();
+                if (!config) throw new Error('No passkey config to export.');
+                const payload = JSON.stringify(config, null, 2);
+                const suggestedName = `packtracker-passkey-${new Date().toISOString().slice(0, 10)}.json`;
+                if (window.showSaveFilePicker) {
+                    try {
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName,
+                            types: [{ description: 'PackTracker passkey config', accept: { 'application/json': ['.json'] } }]
+                        });
+                        const writable = await handle.createWritable();
+                        await writable.write(payload);
+                        await writable.close();
+                        return;
+                    } catch (e) {
+                        if (e.name === 'AbortError') return;
+                        throw e;
+                    }
+                }
+                const blob = new Blob([payload], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = suggestedName;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            },
+
+            async importConfigFromFile(file) {
+                const text = await file.text();
+                const config = this.validateConfigObject(JSON.parse(text));
+                if (!config) throw new Error('Invalid passkey config file.');
+                this.saveConfig(config);
+                return config;
+            },
+
+            async pickConfigFile() {
+                if (window.showOpenFilePicker) {
+                    try {
+                        const [handle] = await window.showOpenFilePicker({
+                            multiple: false,
+                            types: [{ description: 'PackTracker passkey config', accept: { 'application/json': ['.json'] } }]
+                        });
+                        return handle.getFile();
+                    } catch (e) {
+                        if (e.name === 'AbortError') return null;
+                        throw e;
+                    }
+                }
+                return null;
+            }
+        };
+
+        let dashboardBooted = false;
+        let dashboardBootPromise = null;
+
+        const PasskeyGate = {
+            showError(message) {
+                el.passkeyGateError.textContent = message;
+                el.passkeyGateError.classList.remove('hidden');
+            },
+
+            clearError() {
+                el.passkeyGateError.textContent = '';
+                el.passkeyGateError.classList.add('hidden');
+            },
+
+            hide() {
+                el.passkeyGate.classList.add('hidden');
+                if (PasskeyAuth.loadConfig()) {
+                    el.passkeyLockBtn.classList.remove('hidden');
+                } else {
+                    el.passkeyLockBtn.classList.add('hidden');
+                }
+                this.updateSettingsUI();
+            },
+
+            show(mode = 'login') {
+                el.passkeyGate.classList.remove('hidden');
+                this.clearError();
+                if (window.lucide) lucide.createIcons({ root: el.passkeyGate });
+
+                const hasConfig = !!PasskeyAuth.loadConfig();
+                const supported = PasskeyAuth.isSupported();
+                el.passkeyPrimaryBtn.disabled = false;
+
+                if (mode === 'login' && hasConfig) {
+                    el.passkeyGateTitle.textContent = 'Unlock Dashboard';
+                    el.passkeyGateSubtitle.textContent = 'Sign in with your device passkey';
+                    el.passkeyPrimaryBtnLabel.textContent = 'Sign in with passkey';
+                    el.passkeyPrimaryBtn.disabled = !supported;
+                    el.passkeySkipBtn.classList.add('hidden');
+                    el.passkeyBackupRow.classList.remove('hidden');
+                } else if (mode === 'setup' || !hasConfig) {
+                    el.passkeyGateTitle.textContent = 'Set up passkey';
+                    el.passkeyGateSubtitle.textContent = 'Protect this dashboard on shared displays';
+                    el.passkeyPrimaryBtnLabel.textContent = supported ? 'Create passkey' : 'Passkey unavailable';
+                    el.passkeyPrimaryBtn.disabled = !supported;
+                    el.passkeySkipBtn.classList.remove('hidden');
+                    el.passkeyBackupRow.classList.remove('hidden');
+                }
+
+                if (!supported) {
+                    el.passkeyGateHint.textContent = 'Open over HTTPS or localhost to use passkeys. You can continue without one or import a config file from counter.';
+                } else {
+                    el.passkeyGateHint.textContent = 'Passkeys are verified on this device only. Same config as counter.html on this site—no account server.';
+                }
+            },
+
+            updateSettingsUI() {
+                const hasConfig = !!PasskeyAuth.loadConfig();
+                if (hasConfig) {
+                    el.passkeyStatusBadge.textContent = 'On';
+                    el.passkeyStatusBadge.className = 'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/10';
+                    el.passkeySetupBtn.classList.add('hidden');
+                    el.passkeyRemoveBtn.classList.remove('hidden');
+                    el.passkeySettingsExportBtn.classList.remove('hidden');
+                    el.passkeySettingsHint.textContent = 'Use the lock icon in the header to require sign-in again.';
+                } else {
+                    el.passkeyStatusBadge.textContent = 'Off';
+                    el.passkeyStatusBadge.className = 'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-slate-600 text-slate-400';
+                    el.passkeySetupBtn.classList.remove('hidden');
+                    el.passkeyRemoveBtn.classList.add('hidden');
+                    el.passkeySettingsExportBtn.classList.add('hidden');
+                    el.passkeySettingsHint.textContent = 'Same passkey config as the counter app on this domain.';
+                }
+            },
+
+            async unlockAndBoot() {
+                this.hide();
+                if (!dashboardBooted) {
+                    if (!dashboardBootPromise) dashboardBootPromise = bootDashboard();
+                    await dashboardBootPromise;
+                    dashboardBooted = true;
+                } else {
+                    restartPolling();
+                }
+            },
+
+            lock() {
+                PasskeyAuth.clearSession();
+                if (state.pollTimer) {
+                    clearInterval(state.pollTimer);
+                    state.pollTimer = null;
+                }
+                if (PasskeyAuth.loadConfig()) {
+                    this.show('login');
+                } else {
+                    this.hide();
+                }
+            },
+
+            bindEvents() {
+                el.passkeyPrimaryBtn.addEventListener('click', async () => {
+                    this.clearError();
+                    try {
+                        if (PasskeyAuth.loadConfig()) {
+                            await PasskeyAuth.authenticatePasskey();
+                        } else {
+                            await PasskeyAuth.registerPasskey();
+                        }
+                        await this.unlockAndBoot();
+                    } catch (err) {
+                        this.showError(err.message || 'Passkey operation failed.');
+                    }
+                });
+
+                el.passkeySkipBtn.addEventListener('click', () => {
+                    this.clearError();
+                    localStorage.setItem(PASSKEY_DECLINE_KEY, '1');
+                    this.unlockAndBoot();
+                });
+
+                const runImport = async (file) => {
+                    if (!file) return;
+                    this.clearError();
+                    try {
+                        await PasskeyAuth.importConfigFromFile(file);
+                        await PasskeyAuth.authenticatePasskey();
+                        await this.unlockAndBoot();
+                    } catch (err) {
+                        this.showError(err.message || 'Import failed.');
+                    }
+                };
+
+                el.passkeyImportBtn.addEventListener('click', async () => {
+                    try {
+                        const file = await PasskeyAuth.pickConfigFile();
+                        await runImport(file);
+                    } catch (err) {
+                        if (err.message) this.showError(err.message);
+                        else el.passkeyImportInput.click();
+                    }
+                });
+
+                el.passkeyImportInput.addEventListener('change', async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    await runImport(file);
+                });
+
+                el.passkeyExportBtn.addEventListener('click', async () => {
+                    this.clearError();
+                    try {
+                        await PasskeyAuth.exportConfigToFile();
+                    } catch (err) {
+                        this.showError(err.message || 'Export failed.');
+                    }
+                });
+
+                el.passkeyLockBtn.addEventListener('click', () => this.lock());
+
+                el.passkeySetupBtn.addEventListener('click', async () => {
+                    try {
+                        await PasskeyAuth.registerPasskey();
+                        localStorage.removeItem(PASSKEY_DECLINE_KEY);
+                        this.updateSettingsUI();
+                        el.passkeyLockBtn.classList.remove('hidden');
+                        alert('Passkey enabled. Use the lock icon to require sign-in again.');
+                    } catch (err) {
+                        alert(err.message || 'Could not create passkey.');
+                    }
+                });
+
+                el.passkeyRemoveBtn.addEventListener('click', () => {
+                    if (!confirm('Remove passkey lock from this browser?')) return;
+                    PasskeyAuth.clearConfig();
+                    PasskeyAuth.clearSession();
+                    this.updateSettingsUI();
+                    el.passkeyLockBtn.classList.add('hidden');
+                });
+
+                el.passkeySettingsExportBtn.addEventListener('click', async () => {
+                    try {
+                        await PasskeyAuth.exportConfigToFile();
+                    } catch (err) {
+                        alert(err.message || 'Export failed.');
+                    }
+                });
+
+                el.passkeySettingsImportBtn.addEventListener('click', async () => {
+                    try {
+                        const file = await PasskeyAuth.pickConfigFile();
+                        if (file) {
+                            await PasskeyAuth.importConfigFromFile(file);
+                            this.updateSettingsUI();
+                            alert('Config imported. Lock the dashboard to sign in with your passkey.');
+                        }
+                    } catch (err) {
+                        if (err.name !== 'AbortError') el.passkeySettingsImportInput.click();
+                    }
+                });
+
+                el.passkeySettingsImportInput.addEventListener('change', async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    try {
+                        await PasskeyAuth.importConfigFromFile(file);
+                        this.updateSettingsUI();
+                        alert('Config imported. Lock the dashboard to sign in with your passkey.');
+                    } catch (err) {
+                        alert(err.message || 'Import failed.');
+                    }
+                });
+            },
+
+            async init() {
+                this.bindEvents();
+                this.updateSettingsUI();
+
+                const hasConfig = !!PasskeyAuth.loadConfig();
+                const sessionOk = PasskeyAuth.isSessionUnlocked();
+                const declinedSetup = localStorage.getItem(PASSKEY_DECLINE_KEY) === '1';
+
+                if (hasConfig && !sessionOk) {
+                    this.show('login');
+                    return;
+                }
+                if (!hasConfig && !declinedSetup) {
+                    this.show('setup');
+                    return;
+                }
+                await this.unlockAndBoot();
+            }
+        };
+
+        function bootDashboard() {
+            loadConfig();
+            applyConfigToForm();
+            renderDashboard();
+            if (state.restUrl && state.restToken) {
+                el.resetCountersBtn.classList.remove('hidden');
+                el.resetCountersBtn.classList.add('flex');
+            }
+            restartPolling();
+            if (state.restUrl && state.restToken) {
+                pushDashboardMetaToRedis().catch(err => console.warn('Dashboard meta publish on load', err));
+            }
+            if (window.lucide) lucide.createIcons();
+            return Promise.resolve();
+        }
+
+        function normalizeRestUrl(raw) {
+            let url = (raw || '').trim();
+            url = url.replace(/\/pipeline\/?$/i, '').replace(/\/$/, '');
+            if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`;
+            return url;
+        }
+
+        function normalizeRestToken(raw) {
+            return (raw || '').trim().replace(/^Bearer\s+/i, '');
+        }
+
+        function lineKeyPrefix(base, lineIndexOneBased) {
+            const b = (base || 'packtracker').replace(/:/g, '').trim() || 'packtracker';
+            return `${b}_line_${lineIndexOneBased}`;
+        }
+
+        function dashboardMetaKey(base, suffix) {
+            const b = (base || 'packtracker').replace(/:/g, '').trim() || 'packtracker';
+            return `${b}_dashboard:${suffix}`;
+        }
+
+        async function pushDashboardMetaToRedis() {
+            const base = state.keyPrefixBase;
+            if (!state.restUrl || !state.restToken) return;
+            const pipeline = [
+                ['SET', dashboardMetaKey(base, 'totalTarget'), String(state.totalTarget)],
+                ['SET', dashboardMetaKey(base, 'lineCount'), String(state.lineCount)],
+                ['SET', dashboardMetaKey(base, 'updatedAt'), new Date().toISOString()]
+            ];
+            const configAt = new Date().toISOString();
+            if (state.publishUpstashForCounters) {
+                pipeline.push(
+                    ['SET', dashboardMetaKey(base, 'upstashPublished'), '1'],
+                    ['SET', dashboardMetaKey(base, 'restUrl'), state.restUrl],
+                    ['SET', dashboardMetaKey(base, 'restToken'), state.restToken],
+                    ['SET', dashboardMetaKey(base, 'keyPrefixBase'), base],
+                    ['SET', dashboardMetaKey(base, 'upstashConfigAt'), configAt]
+                );
+            } else {
+                pipeline.push(['SET', dashboardMetaKey(base, 'upstashPublished'), '0']);
+            }
+            await redisRequest(pipeline, true);
+        }
+
+        function encodeUpstashBootstrapPayload() {
+            const payload = JSON.stringify({
+                restUrl: state.restUrl,
+                restToken: state.restToken,
+                keyPrefixBase: state.keyPrefixBase
+            });
+            return btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        function counterUrlForLine(lineNum, withBootstrap = true) {
+            const u = new URL('counter.html', window.location.href);
+            u.searchParams.set('line', String(lineNum));
+            if (withBootstrap && state.restUrl && state.restToken) {
+                u.searchParams.set('upstash_bootstrap', encodeUpstashBootstrapPayload());
+            }
+            return u.pathname + u.search;
+        }
+
+        function resetConfirmMessage() {
+            const n = state.lineCount;
+            const base = state.keyPrefixBase;
+            return `Reset ALL ${n} line counter(s) in Upstash?\n\nThis deletes Redis keys for each line:\n• ${lineKeyPrefix(base, 1)}:count, :events, :updatedAt\n• … through line ${n}\n\nTarget settings are kept. Counters will zero within ~12 seconds.\n\nThis cannot be undone.`;
+        }
+
+        async function resetAllCountersInUpstash() {
+            if (!state.restUrl || !state.restToken) {
+                throw new Error('Configure Upstash REST URL and a write token first.');
+            }
+            const base = state.keyPrefixBase;
+            const lines = Math.max(1, state.lineCount);
+            const pipeline = [];
+            for (let i = 1; i <= lines; i++) {
+                const prefix = lineKeyPrefix(base, i);
+                pipeline.push(['DEL', `${prefix}:count`, `${prefix}:updatedAt`, `${prefix}:events`]);
+            }
+            const resetAt = new Date().toISOString();
+            pipeline.push(['SET', dashboardMetaKey(base, 'resetAt'), resetAt]);
+            await redisRequest(pipeline, true);
+
+            state.lines = [];
+            for (let i = 1; i <= lines; i++) {
+                state.lines.push({
+                    number: i,
+                    redisKey: `${lineKeyPrefix(base, i)}:count`,
+                    count: 0,
+                    target: distributeTarget(state.totalTarget, lines)[i - 1] ?? 0,
+                    updatedAt: null,
+                    stale: true
+                });
+            }
+            renderDashboard();
+        }
+
+        async function handleResetCounters() {
+            saveConfig();
+            if (!state.restUrl || !state.restToken) {
+                el.settingsMessage.textContent = 'Add Upstash URL and write token to reset.';
+                el.settingsMessage.className = 'text-[11px] text-rose-400 min-h-[1rem]';
+                openSettings(true);
+                return;
+            }
+            if (!confirm(resetConfirmMessage())) return;
+
+            el.settingsMessage.textContent = 'Resetting counters…';
+            el.settingsMessage.className = 'text-[11px] text-amber-400 min-h-[1rem]';
+            setConnectionBadge('busy', 'Resetting');
+            try {
+                await resetAllCountersInUpstash();
+                el.lastRefresh.textContent = new Date().toLocaleTimeString();
+                setConnectionBadge('ok', 'Reset done');
+                el.settingsMessage.textContent = 'All line counts cleared in Upstash.';
+                el.settingsMessage.className = 'text-[11px] text-emerald-400 min-h-[1rem]';
+                await fetchLineCounts();
+            } catch (e) {
+                setConnectionBadge('error', 'Reset failed');
+                el.settingsMessage.textContent = e.message || 'Reset failed (need write token?)';
+                el.settingsMessage.className = 'text-[11px] text-rose-400 min-h-[1rem]';
+            }
+        }
+
+        /** Remainder goes to earlier lines: 11 / 2 → [6, 5] */
+        function distributeTarget(totalTarget, lineCount) {
+            const total = Math.max(0, Math.floor(Number(totalTarget) || 0));
+            const lines = Math.max(1, Math.floor(Number(lineCount) || 1));
+            const base = Math.floor(total / lines);
+            const remainder = total % lines;
+            return Array.from({ length: lines }, (_, i) => base + (i < remainder ? 1 : 0));
+        }
+
+        function updateTargetSplitPreview() {
+            const targets = distributeTarget(el.totalTarget.value, el.lineCount.value);
+            const base = el.keyPrefixBase.value.trim() || 'packtracker';
+            const parts = targets.map((t, i) => `Line ${i + 1}: ${t} (${lineKeyPrefix(base, i + 1)}:count)`);
+            el.targetSplitPreview.innerHTML = parts.length
+                ? `<span class="text-slate-500 block mb-1">Per-line targets</span>${parts.join('<br>')}`
+                : '';
+        }
+
+        function loadConfig() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return;
+                const c = JSON.parse(raw);
+                state.restUrl = c.restUrl || '';
+                state.restToken = c.restToken || '';
+                state.keyPrefixBase = (c.keyPrefixBase || 'packtracker').replace(/:/g, '');
+                state.totalTarget = Math.max(0, Number(c.totalTarget) || 0);
+                state.lineCount = Math.max(2, Math.min(24, Number(c.lineCount) || 2));
+                state.pollSeconds = Math.max(1, Math.min(60, Number(c.pollSeconds) || 3));
+                state.publishUpstashForCounters = c.publishUpstashForCounters !== false;
+                state.sheet.enabled = !!c.sheet?.enabled;
+                state.sheet.webAppUrl = c.sheet?.webAppUrl || '';
+                state.sheet.sharedSecret = c.sheet?.sharedSecret || '';
+            } catch (e) {
+                console.warn('Dashboard config load failed', e);
+            }
+        }
+
+        function saveConfig() {
+            state.restUrl = normalizeRestUrl(el.restUrl.value);
+            state.restToken = normalizeRestToken(el.restToken.value);
+            state.keyPrefixBase = (el.keyPrefixBase.value.trim() || 'packtracker').replace(/:/g, '');
+            state.totalTarget = Math.max(0, Math.floor(Number(el.totalTarget.value) || 0));
+            state.lineCount = Math.max(2, Math.min(24, Math.floor(Number(el.lineCount.value) || 2)));
+            state.pollSeconds = Math.max(1, Math.min(60, Math.floor(Number(el.pollSeconds.value) || 3)));
+            state.publishUpstashForCounters = el.publishUpstashForCounters.checked;
+            state.sheet.enabled = el.sheetEnableToggle.checked;
+            state.sheet.webAppUrl = normalizeSheetWebAppUrl(el.sheetWebAppUrl.value);
+            state.sheet.sharedSecret = (el.sheetSharedSecret.value || '').trim();
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                restUrl: state.restUrl,
+                restToken: state.restToken,
+                keyPrefixBase: state.keyPrefixBase,
+                totalTarget: state.totalTarget,
+                lineCount: state.lineCount,
+                pollSeconds: state.pollSeconds,
+                publishUpstashForCounters: state.publishUpstashForCounters,
+                sheet: {
+                    enabled: state.sheet.enabled,
+                    webAppUrl: state.sheet.webAppUrl,
+                    sharedSecret: state.sheet.sharedSecret
+                }
+            }));
+        }
+
+        function applyConfigToForm() {
+            el.restUrl.value = state.restUrl;
+            el.restToken.value = state.restToken;
+            el.keyPrefixBase.value = state.keyPrefixBase;
+            el.totalTarget.value = state.totalTarget;
+            el.lineCount.value = state.lineCount;
+            el.pollSeconds.value = state.pollSeconds;
+            el.publishUpstashForCounters.checked = state.publishUpstashForCounters;
+            el.sheetEnableToggle.checked = state.sheet.enabled;
+            el.sheetWebAppUrl.value = state.sheet.webAppUrl;
+            el.sheetSharedSecret.value = state.sheet.sharedSecret;
+            el.lineCountLabel.textContent = state.lineCount;
+            el.pollIntervalLabel.textContent = state.pollSeconds;
+            el.totalTargetDisplay.textContent = state.totalTarget;
+            updateTargetSplitPreview();
+            updateSheetSyncBadge('idle');
+        }
+
+        function normalizeSheetWebAppUrl(raw) {
+            let url = (raw || '').trim();
+            if (!url) return '';
+            if (url.includes('script.google.com') && url.includes('/dev')) {
+                url = url.replace(/\/dev(\?.*)?$/, '/exec');
+            }
+            return url;
+        }
+
+        function sheetCountsFingerprint() {
+            return JSON.stringify(state.lines.map(l => ({ n: l.number, c: l.count, t: l.target })));
+        }
+
+        function buildSheetPayload() {
+            const totalCount = state.lines.reduce((s, l) => s + l.count, 0);
+            const remaining = Math.max(0, state.totalTarget - totalCount);
+            const payload = {
+                recordedAt: new Date().toISOString(),
+                totalCount,
+                totalTarget: state.totalTarget,
+                remaining,
+                lineCount: state.lineCount,
+                keyPrefixBase: state.keyPrefixBase,
+                lines: state.lines.map(l => ({
+                    line: l.number,
+                    count: l.count,
+                    target: l.target,
+                    updatedAt: l.updatedAt
+                }))
+            };
+            const secret = (state.sheet.sharedSecret || '').trim();
+            if (secret) payload.secret = secret;
+            return payload;
+        }
+
+        function setSheetSyncHint(text, kind = 'muted') {
+            const classes = {
+                muted: 'text-[10px] text-slate-500 min-h-[1rem]',
+                ok: 'text-[10px] text-emerald-400 min-h-[1rem]',
+                error: 'text-[10px] text-rose-400 min-h-[1rem]',
+                busy: 'text-[10px] text-amber-400 min-h-[1rem]'
+            };
+            el.sheetSyncHint.className = classes[kind] || classes.muted;
+            el.sheetSyncHint.textContent = text;
+        }
+
+        function updateSheetSyncBadge(kind) {
+            if (!el.sheetSyncBadge) return;
+            if (!state.sheet.enabled || !state.sheet.webAppUrl) {
+                el.sheetSyncBadge.classList.add('hidden');
+                return;
+            }
+            el.sheetSyncBadge.classList.remove('hidden');
+            const styles = {
+                off: 'border-slate-600 text-slate-500 bg-slate-900/60',
+                ok: 'border-green-500/40 text-green-300 bg-green-500/10',
+                error: 'border-rose-500/40 text-rose-300 bg-rose-500/10',
+                busy: 'border-amber-500/40 text-amber-300 bg-amber-500/10',
+                idle: 'border-slate-600 text-slate-400 bg-slate-900/60'
+            };
+            const labels = { off: 'Sheet off', ok: 'Sheet synced', error: 'Sheet error', busy: 'Sheet…', idle: 'Sheet on' };
+            el.sheetSyncBadge.className = `text-[10px] uppercase font-semibold px-2 py-1 rounded-full border ${styles[kind] || styles.idle}`;
+            el.sheetSyncBadge.textContent = labels[kind] || 'Sheet';
+        }
+
+        async function parseSheetWebAppResponse(res) {
+            const text = await res.text();
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                if (text.trim().startsWith('{')) throw new Error('Invalid JSON from web app');
+                return { ok: res.ok, raw: text.slice(0, 200) };
+            }
+        }
+
+        async function postToGoogleSheet(force = false) {
+            if (!force && !state.sheet.enabled) return;
+            const url = normalizeSheetWebAppUrl(state.sheet.webAppUrl);
+            if (!url) {
+                setSheetSyncHint('Add Web app URL from Apps Script deployment.', 'error');
+                updateSheetSyncBadge('error');
+                return false;
+            }
+            if (!url.includes('script.google.com')) {
+                setSheetSyncHint('URL must be a script.google.com/macros/s/…/exec Web app link.', 'error');
+                updateSheetSyncBadge('error');
+                return false;
+            }
+
+            const fingerprint = sheetCountsFingerprint();
+            if (!force && fingerprint === state.lastSheetPostFingerprint) return true;
+
+            if (state.sheetPosting) return false;
+            state.sheetPosting = true;
+            updateSheetSyncBadge('busy');
+            setSheetSyncHint('Posting to Google Sheet…', 'busy');
+
+            const payload = buildSheetPayload();
+            if (force) payload.test = true;
+
+            const form = new URLSearchParams();
+            form.set('payload', JSON.stringify(payload));
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                    body: form.toString()
+                });
+                const data = await parseSheetWebAppResponse(res);
+                if (!res.ok || data.ok === false) {
+                    throw new Error(data.error || `Web app HTTP ${res.status}`);
+                }
+                state.lastSheetPostFingerprint = fingerprint;
+                updateSheetSyncBadge('ok');
+                setSheetSyncHint(`Saved at ${new Date().toLocaleTimeString()} — see Live + Log tabs.`, 'ok');
+                return true;
+            } catch (err) {
+                console.warn('Sheet post failed', err);
+                try {
+                    await fetch(url, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                        body: form.toString()
+                    });
+                    state.lastSheetPostFingerprint = fingerprint;
+                    updateSheetSyncBadge('ok');
+                    setSheetSyncHint('Sent (response blocked by browser) — confirm Log tab has a new row.', 'ok');
+                    return true;
+                } catch (fallbackErr) {
+                    updateSheetSyncBadge('error');
+                    setSheetSyncHint(err.message || 'Post failed — use /exec URL and redeploy New version', 'error');
+                    return false;
+                }
+            } finally {
+                state.sheetPosting = false;
+            }
+        }
+
+        function setConnectionBadge(kind, text) {
+            const styles = {
+                ok: 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10',
+                error: 'border-rose-500/40 text-rose-300 bg-rose-500/10',
+                idle: 'border-slate-600 text-slate-500 bg-slate-900/60',
+                busy: 'border-amber-500/40 text-amber-300 bg-amber-500/10'
+            };
+            el.connectionBadge.className = `text-[10px] uppercase font-semibold px-2 py-1 rounded-full border ${styles[kind] || styles.idle}`;
+            el.connectionBadge.textContent = text;
+        }
+
+        async function redisRequest(body, pipeline = false) {
+            const base = normalizeRestUrl(state.restUrl);
+            const token = normalizeRestToken(state.restToken);
+            if (!base || !token) throw new Error('REST URL and token required');
+
+            const url = pipeline ? `${base}/pipeline` : base;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (pipeline && Array.isArray(data)) {
+                const failed = data.find(item => item && item.error);
+                if (failed) throw new Error(failed.error);
+                return data.map(item => (item ? item.result : null));
+            }
+            if (data && data.error) throw new Error(data.error);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return data.result;
+        }
+
+        async function ping() {
+            const base = normalizeRestUrl(state.restUrl);
+            const token = normalizeRestToken(state.restToken);
+            const res = await fetch(`${base}/ping`, {
+                method: 'GET',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            return data.result;
+        }
+
+        function formatRelativeTime(iso) {
+            if (!iso) return 'Never synced';
+            const t = Date.parse(iso);
+            if (Number.isNaN(t)) return iso;
+            const sec = Math.floor((Date.now() - t) / 1000);
+            if (sec < 5) return 'Just now';
+            if (sec < 60) return `${sec}s ago`;
+            if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+            return new Date(t).toLocaleTimeString();
+        }
+
+        /** Auto-fit cards; use at least 2 columns when 2+ lines are monitored */
+        function applyLineGridLayout() {
+            const grid = el.lineGrid;
+            const n = state.lines.length;
+            grid.classList.remove('line-grid--single');
+            grid.style.gridTemplateColumns = '';
+
+            if (!n) return;
+
+            if (n === 1) {
+                grid.classList.add('line-grid--single');
+                return;
+            }
+
+            if (n === 2) {
+                grid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+                return;
+            }
+
+            const maxCols = n;
+            const gapRem = 1;
+            const gapsTotal = (maxCols - 1) * gapRem;
+            grid.style.gridTemplateColumns =
+                `repeat(auto-fit, minmax(max(10.5rem, calc((100% - ${gapsTotal}rem) / ${maxCols})), 1fr))`;
+        }
+
+        function renderDashboard() {
+            const targets = distributeTarget(state.totalTarget, state.lineCount);
+            let sum = 0;
+            state.lines.forEach(line => { sum += line.count; });
+
+            el.totalCount.textContent = sum;
+            el.totalTargetDisplay.textContent = state.totalTarget;
+            const remaining = Math.max(0, state.totalTarget - sum);
+            el.totalRemaining.textContent = state.totalTarget > 0
+                ? (remaining === 0 ? 'Target reached' : `${remaining} box${remaining === 1 ? '' : 'es'} remaining`)
+                : 'Set a total target in settings';
+
+            const pct = state.totalTarget > 0 ? Math.min(100, (sum / state.totalTarget) * 100) : 0;
+            el.totalProgressBar.style.width = `${pct}%`;
+
+            if (!state.lines.length) {
+                el.lineGrid.innerHTML = '<p class="line-grid-placeholder dash-muted text-sm py-8 text-center border border-dashed rounded-xl" style="border-color: var(--dash-border)">Configure lines in settings.</p>';
+                applyLineGridLayout();
+                return;
+            }
+
+            el.lineGrid.innerHTML = state.lines.map(line => {
+                const target = line.target;
+                const pctLine = target > 0 ? Math.min(100, (line.count / target) * 100) : (line.count > 0 ? 100 : 0);
+                const done = target > 0 && line.count >= target;
+                const accent = ((line.number - 1) % 8) + 1;
+                const statusClass = done ? 'is-complete' : (line.stale ? 'is-stale' : 'is-running');
+                const statusLabel = done ? 'Complete' : (line.stale ? 'Stale' : 'Running');
+                const fillClass = done ? 'line-progress-fill is-complete' : 'line-progress-fill';
+
+                return `
+                <article class="line-card line-accent-${accent} flex flex-col gap-3">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex items-start gap-2 min-w-0">
+                            <span class="line-badge-num">L${line.number}</span>
+                            <div class="min-w-0">
+                                <h3 class="line-label">Line ${line.number}</h3>
+                                <p class="text-[10px] font-mono dash-muted mt-0.5 truncate" title="${line.redisKey}">${line.redisKey}</p>
+                            </div>
+                        </div>
+                        <span class="status-pill ${statusClass}">${statusLabel}</span>
+                    </div>
+                    <div class="line-count-row">
+                        <span class="line-count">${line.count}</span>
+                        <span class="line-count-sep">/</span>
+                        <span class="line-target">${target}</span>
+                    </div>
+                    <div class="dash-progress-track h-2">
+                        <div class="${fillClass}" style="width: ${pctLine}%"></div>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px] dash-muted">
+                        <span>Updated ${formatRelativeTime(line.updatedAt)}</span>
+                        <a href="${counterUrlForLine(line.number)}" class="line-link" target="_blank" rel="noopener noreferrer">Open counter →</a>
+                    </div>
+                </article>`;
+            }).join('');
+            applyLineGridLayout();
+
+            const sumDone = state.totalTarget > 0 && sum >= state.totalTarget;
+            el.totalProgressBar.classList.toggle('is-complete', sumDone);
+        }
+
+        async function fetchLineCounts() {
+            if (state.fetching) return;
+            if (!state.restUrl || !state.restToken) {
+                setConnectionBadge('idle', 'Not configured');
+                return;
+            }
+
+            state.fetching = true;
+            setConnectionBadge('busy', 'Refreshing');
+
+            const targets = distributeTarget(state.totalTarget, state.lineCount);
+            const cmds = [];
+            for (let i = 1; i <= state.lineCount; i++) {
+                const prefix = lineKeyPrefix(state.keyPrefixBase, i);
+                cmds.push(['GET', `${prefix}:count`]);
+                cmds.push(['GET', `${prefix}:updatedAt`]);
+            }
+
+            try {
+                const results = await redisRequest(cmds, true);
+                const now = Date.now();
+                state.lines = [];
+                for (let i = 0; i < state.lineCount; i++) {
+                    const countRaw = results[i * 2];
+                    const updatedAt = results[i * 2 + 1];
+                    const count = Math.max(0, parseInt(countRaw, 10) || 0);
+                    const updatedMs = updatedAt ? Date.parse(updatedAt) : NaN;
+                    const stale = !updatedAt || (now - updatedMs > 120000);
+
+                    state.lines.push({
+                        number: i + 1,
+                        redisKey: `${lineKeyPrefix(state.keyPrefixBase, i + 1)}:count`,
+                        count,
+                        target: targets[i] ?? 0,
+                        updatedAt: updatedAt || null,
+                        stale
+                    });
+                }
+                el.lastRefresh.textContent = new Date().toLocaleTimeString();
+                setConnectionBadge('ok', 'Live');
+                renderDashboard();
+                postToGoogleSheet(false);
+            } catch (err) {
+                console.warn('Dashboard fetch failed', err);
+                setConnectionBadge('error', 'Error');
+                el.settingsMessage.textContent = err.message || 'Fetch failed';
+                el.settingsMessage.className = 'text-[11px] text-rose-400 min-h-[1rem]';
+            } finally {
+                state.fetching = false;
+            }
+        }
+
+        function restartPolling() {
+            if (state.pollTimer) clearInterval(state.pollTimer);
+            state.pollTimer = null;
+            if (!state.restUrl || !state.restToken) return;
+            fetchLineCounts();
+            state.pollTimer = setInterval(fetchLineCounts, state.pollSeconds * 1000);
+        }
+
+        function openSettings(open) {
+            el.settingsPanel.classList.toggle('settings-open', open);
+            el.settingsBackdrop.classList.toggle('settings-open', open);
+        }
+
+        function importFromCounterStorage() {
+            try {
+                const raw = localStorage.getItem(COUNTER_UPSTASH_KEY);
+                if (!raw) {
+                    el.settingsMessage.textContent = 'No counter Upstash config found in this browser.';
+                    el.settingsMessage.className = 'text-[11px] text-amber-400 min-h-[1rem]';
+                    return;
+                }
+                const c = JSON.parse(raw);
+                if (c.restUrl) el.restUrl.value = c.restUrl;
+                if (c.restToken) el.restToken.value = c.restToken;
+                const base = (c.keyPrefix || 'packtracker').replace(/:/g, '').replace(/_line_?\d+$/i, '');
+                el.keyPrefixBase.value = base;
+                el.settingsMessage.textContent = 'Imported URL, token, and key prefix from counter.';
+                el.settingsMessage.className = 'text-[11px] text-emerald-400 min-h-[1rem]';
+                updateTargetSplitPreview();
+            } catch (e) {
+                el.settingsMessage.textContent = 'Import failed.';
+                el.settingsMessage.className = 'text-[11px] text-rose-400 min-h-[1rem]';
+            }
+        }
+
+        el.settingsOpenBtn.addEventListener('click', () => openSettings(true));
+        el.settingsCloseBtn.addEventListener('click', () => openSettings(false));
+        el.settingsBackdrop.addEventListener('click', () => openSettings(false));
+
+        ['totalTarget', 'lineCount', 'keyPrefixBase'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateTargetSplitPreview);
+        });
+
+        el.saveSettingsBtn.addEventListener('click', async () => {
+            saveConfig();
+            applyConfigToForm();
+            el.settingsMessage.textContent = 'Saving…';
+            el.settingsMessage.className = 'text-[11px] text-slate-400 min-h-[1rem]';
+            try {
+                if (state.restUrl && state.restToken) {
+                    await pushDashboardMetaToRedis();
+                    el.settingsMessage.textContent = 'Saved — targets published to counters.';
+                } else {
+                    el.settingsMessage.textContent = 'Saved locally. Add Upstash credentials to publish line targets.';
+                }
+                el.settingsMessage.className = 'text-[11px] text-emerald-400 min-h-[1rem]';
+            } catch (e) {
+                el.settingsMessage.textContent = e.message || 'Saved locally; Redis publish failed.';
+                el.settingsMessage.className = 'text-[11px] text-amber-400 min-h-[1rem]';
+            }
+            restartPolling();
+            if (state.restUrl && state.restToken) {
+                el.resetCountersBtn.classList.remove('hidden');
+                el.resetCountersBtn.classList.add('flex');
+            }
+            openSettings(false);
+        });
+
+        el.testConnectionBtn.addEventListener('click', async () => {
+            saveConfig();
+            el.settingsMessage.textContent = 'Testing…';
+            el.settingsMessage.className = 'text-[11px] text-slate-400 min-h-[1rem]';
+            try {
+                const pong = await ping();
+                el.settingsMessage.textContent = `Connected (${pong || 'PONG'})`;
+                el.settingsMessage.className = 'text-[11px] text-emerald-400 min-h-[1rem]';
+            } catch (e) {
+                el.settingsMessage.textContent = e.message || 'Connection failed';
+                el.settingsMessage.className = 'text-[11px] text-rose-400 min-h-[1rem]';
+            }
+        });
+
+        el.importCounterCredsBtn.addEventListener('click', importFromCounterStorage);
+        el.resetCountersBtn.addEventListener('click', handleResetCounters);
+        el.resetCountersSettingsBtn.addEventListener('click', handleResetCounters);
+
+        el.sheetTestPostBtn.addEventListener('click', async () => {
+            saveConfig();
+            applyConfigToForm();
+            if (!state.lines.length) {
+                setSheetSyncHint('Wait for a successful Upstash refresh first, or enable Upstash.', 'error');
+                return;
+            }
+            state.lastSheetPostFingerprint = '';
+            await postToGoogleSheet(true);
+        });
+
+        el.sheetEnableToggle.addEventListener('change', () => {
+            saveConfig();
+            updateSheetSyncBadge(state.sheet.enabled ? 'idle' : 'off');
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') fetchLineCounts();
+        });
+        window.addEventListener('resize', () => applyLineGridLayout());
+
+        window.addEventListener('load', () => {
+            if (window.DashboardTheme) DashboardTheme.initSelect();
+            if (window.lucide) lucide.createIcons();
+            PasskeyGate.init();
+        });
+    </script>
+</body>
+</html>

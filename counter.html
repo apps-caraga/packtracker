@@ -548,7 +548,12 @@
             },
 
             lineTargetCap: 0,
-            dashboardTargetPollId: null
+            dashboardTargetPollId: null,
+            lastAckDashboardResetAt: '',
+            /** Last :updatedAt value read from or written to Upstash for this line. */
+            lastAdoptedRemoteUpdatedAt: '',
+            /** Pending local count not yet reflected in Upstash (avoid poll clobber). */
+            lastLocalCountPushAt: 0
         };
 
         // DOM Elements Cache
@@ -765,9 +770,52 @@
             }
         }
 
-        function applyDashboardRemoteReset(resetAt) {
+        function parseRedisTimestamp(iso) {
+            if (iso == null || iso === '') return null;
+            const t = Date.parse(String(iso).trim());
+            return Number.isNaN(t) ? null : t;
+        }
+
+        /** Apply line count from Upstash (source of truth). Tracks :updatedAt on each adoption. */
+        function adoptCountFromUpstash(remote, { forceOverwriteLocal = false, statusMessage } = {}) {
+            if (remote.count == null) return false;
+
+            const remoteTs = remote.updatedAt || '';
+            const sameSnapshot = remoteTs === (state.lastAdoptedRemoteUpdatedAt || '') && state.count === remote.count;
+            if (sameSnapshot) return false;
+
+            if (!forceOverwriteLocal
+                && state.count > remote.count
+                && remoteTs === (state.lastAdoptedRemoteUpdatedAt || '')) {
+                return false;
+            }
+
+            state.count = remote.count;
+            state.lastAdoptedRemoteUpdatedAt = remoteTs;
+            updateCounterUI();
+            saveToLocalStorage();
+            if (statusMessage) UpstashSync.setStatus('ok', statusMessage);
+            return true;
+        }
+
+        async function applyDashboardRemoteReset(resetAt) {
             const ts = (resetAt || '').trim();
             if (!ts || ts === state.lastAckDashboardResetAt) return;
+
+            if (UpstashSync.canQueryRedis()) {
+                try {
+                    const remote = await UpstashSync.fetchLineCountFromRedis();
+                    state.lastAckDashboardResetAt = ts;
+                    adoptCountFromUpstash(remote, {
+                        forceOverwriteLocal: true,
+                        statusMessage: remote.count != null ? undefined : undefined
+                    });
+                    if (remote.count != null) return;
+                } catch (e) {
+                    console.warn('Reset check against Upstash failed', e);
+                }
+            }
+
             state.count = 0;
             state.logs = [];
             state.sessionStartTime = null;
@@ -1067,8 +1115,62 @@
                 return this.parseResponse(data, res, false);
             },
 
+            async fetchLineCountFromRedis() {
+                if (!this.canQueryRedis() || !resolvedLineNumber()) {
+                    return { count: null, updatedAt: null };
+                }
+                const prefix = effectiveRedisKeyPrefix();
+                const results = await this.request([
+                    ['GET', `${prefix}:count`],
+                    ['GET', `${prefix}:updatedAt`]
+                ], true);
+                const raw = results[0];
+                if (raw == null || raw === '') {
+                    return { count: null, updatedAt: results[1] || null };
+                }
+                const count = Math.max(0, parseInt(raw, 10) || 0);
+                return {
+                    count: Number.isFinite(count) ? count : null,
+                    updatedAt: results[1] || null
+                };
+            },
+
+            async pullCountFromRedis(options = {}) {
+                if (!this.isReady()) return;
+                const joining = options.initial === true;
+                try {
+                    const remote = await this.fetchLineCountFromRedis();
+                    if (remote.count == null) return;
+
+                    if (joining) {
+                        adoptCountFromUpstash(remote, {
+                            forceOverwriteLocal: true,
+                            statusMessage: `Count ${remote.count} from Upstash`
+                        });
+                        return;
+                    }
+
+                    const remoteChanged = (remote.updatedAt || '') !== (state.lastAdoptedRemoteUpdatedAt || '');
+                    if (!remoteChanged && state.count === remote.count) return;
+
+                    adoptCountFromUpstash(remote, {
+                        forceOverwriteLocal: false,
+                        statusMessage: state.count !== remote.count ? `Count ${remote.count} from Upstash` : undefined
+                    });
+                } catch (err) {
+                    console.warn('Pull count from Upstash failed:', err);
+                }
+            },
+
             async pushLogEntry(logItem, eventKind = 'count') {
                 if (!this.isReady()) return;
+
+                const allowZeroPublish = eventKind === 'count_reset'
+                    || eventKind === 'decrement'
+                    || eventKind === 'set_count';
+                if (state.count === 0 && !allowZeroPublish) {
+                    return;
+                }
 
                 const prefix = effectiveRedisKeyPrefix();
                 const eventsKey = `${prefix}:events`;
@@ -1080,12 +1182,15 @@
                 });
 
                 try {
+                    const updatedAt = new Date().toISOString();
                     await this.request([
                         ['LPUSH', eventsKey, payload],
                         ['LTRIM', eventsKey, 0, 499],
                         ['SET', `${prefix}:count`, String(state.count)],
-                        ['SET', `${prefix}:updatedAt`, new Date().toISOString()]
+                        ['SET', `${prefix}:updatedAt`, updatedAt]
                     ], true);
+                    state.lastAdoptedRemoteUpdatedAt = updatedAt;
+                    state.lastLocalCountPushAt = Date.now();
                     this.setStatus('ok', 'Synced');
                 } catch (err) {
                     console.warn('Upstash sync failed:', err);
@@ -1111,7 +1216,11 @@
                     ], true);
                     const totalTarget = parseInt(results[0], 10) || 0;
                     const lineCount = parseInt(results[1], 10) || 0;
-                    applyDashboardRemoteReset(results[2]);
+                    await applyDashboardRemoteReset(results[2]);
+
+                    const remote = await this.fetchLineCountFromRedis();
+                    adoptCountFromUpstash(remote);
+
                     state.lineTargetCap = computeLineTargetCap(totalTarget, lineCount || 1);
                     updateCounterUI();
                 } catch (err) {
@@ -1135,11 +1244,14 @@
                     recordedAt: new Date().toISOString()
                 });
                 try {
+                    const updatedAt = new Date().toISOString();
                     await this.request([
                         ['LPUSH', `${prefix}:events`, payload],
                         ['SET', `${prefix}:count`, '0'],
-                        ['SET', `${prefix}:updatedAt`, new Date().toISOString()]
+                        ['SET', `${prefix}:updatedAt`, updatedAt]
                     ], true);
+                    state.lastAdoptedRemoteUpdatedAt = updatedAt;
+                    state.lastLocalCountPushAt = Date.now();
                     this.setStatus('ok', 'Reset synced');
                 } catch (err) {
                     console.warn('Upstash reset sync failed:', err);
@@ -3293,10 +3405,14 @@
         }
 
         async function bootApplication() {
+            state.lastLocalCountPushAt = 0;
+            state.lastAdoptedRemoteUpdatedAt = '';
+
             UpstashSync.loadConfig();
             await UpstashSync.syncFromDashboard();
             UpstashSync.applyConfigToForm();
             loadLocalStorage();
+            await UpstashSync.pullCountFromRedis({ initial: true });
             UpstashSync.startDashboardTargetPolling();
             setupEventListeners();
             setupRoiInteractions();

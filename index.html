@@ -9,6 +9,7 @@
     <meta name="theme-color" content="#0f172a">
     <meta name="description" content="Multi-line box counter with camera detection and live Upstash dashboard">
     <script src="dashboard-theme.js"></script>
+    <script src="setup-config.js"></script>
     <link rel="stylesheet" href="dashboard-themes.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -56,14 +57,17 @@
                 <i data-lucide="package-check" class="w-10 h-10"></i>
             </div>
             <h1 class="text-2xl sm:text-3xl font-bold tracking-tight dash-text mb-2">PackTracker</h1>
-            <p class="text-sm sm:text-base dash-muted leading-relaxed mb-8 max-w-sm mx-auto">
+            <p class="text-sm sm:text-base dash-muted leading-relaxed mb-4 max-w-sm mx-auto">
                 Count boxes on the line with your camera, sync to Redis, and watch every belt on one dashboard.
             </p>
+            <p id="setupRequiredNotice" class="hidden text-[11px] text-amber-300/95 bg-amber-950/40 border border-amber-800/50 rounded-lg px-3 py-2 mb-6 max-w-sm mx-auto leading-relaxed">
+                Upstash is not configured in this browser yet. Complete connection setup once, then open the dashboard.
+            </p>
             <div class="flex flex-col sm:flex-row gap-3 justify-center">
-                <a href="dashboard.html"
+                <a id="primaryAppLink" href="dashboard.html"
                     class="landing-btn-primary inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition shadow-lg">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
-                    Open dashboard
+                    <span id="primaryAppLinkLabel">Open dashboard</span>
                 </a>
                 <a href="counter.html?line=1"
                     class="landing-btn-secondary inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition">
@@ -83,6 +87,18 @@
         window.addEventListener('load', () => {
             if (window.PackTrackerTheme) PackTrackerTheme.initSelect?.();
             if (window.lucide) lucide.createIcons();
+            if (window.PackTrackerConnection && !PackTrackerConnection.isConfigured()) {
+                const notice = document.getElementById('setupRequiredNotice');
+                const link = document.getElementById('primaryAppLink');
+                const label = document.getElementById('primaryAppLinkLabel');
+                notice?.classList.remove('hidden');
+                if (link) {
+                    link.href = 'setup.html?return=dashboard.html';
+                    link.querySelector('[data-lucide]')?.setAttribute('data-lucide', 'settings');
+                }
+                if (label) label.textContent = 'Connection setup';
+                if (window.lucide) lucide.createIcons();
+            }
         });
     </script>
 </body>

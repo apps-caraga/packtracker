@@ -611,6 +611,7 @@
 
         const UPSTASH_CONFIG_KEY = 'packtracker_upstash';
         const DASHBOARD_STORAGE_KEY = 'packtracker_dashboard';
+        const CONNECTION_STORAGE_KEY = 'packtracker_connection';
 
         function parseKeyPrefixParts(full) {
             const cleaned = (full || 'packtracker').replace(/:/g, '').trim() || 'packtracker';
@@ -714,7 +715,8 @@
 
         function mergeFromDashboardLocalStorage(force = false) {
             try {
-                const raw = localStorage.getItem(DASHBOARD_STORAGE_KEY);
+                let raw = localStorage.getItem(CONNECTION_STORAGE_KEY);
+                if (!raw) raw = localStorage.getItem(DASHBOARD_STORAGE_KEY);
                 if (!raw) return false;
                 const c = JSON.parse(raw);
                 let changed = false;

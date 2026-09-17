@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full theme-root" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PackTracker — Connection setup</title>
+    <link href="data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAYAAABPYyMiAAAABmJLR0T///////8JWPfcAAAACXBIWXMAAABIAAAASABGyWs+AAAAF0lEQVRIx2NgGAWjYBSMglEwCkbBSAcACBAAAeaR9cIAAAAASUVORK5CYII=" rel="icon" type="image/x-icon" />
+    <meta name="theme-color" content="#0f172a">
+    <script src="dashboard-theme.js"></script>
+    <link rel="stylesheet" href="dashboard-themes.css">
+    <script src="setup-config.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .setup-card {
+            background: var(--dash-card);
+            border: 1px solid var(--dash-border);
+            border-radius: 1rem;
+        }
+        .sheet-code-block {
+            max-height: 14rem;
+            overflow: auto;
+            background: var(--dash-surface, #020617);
+            border: 1px solid var(--dash-border, #334155);
+            border-radius: 0.75rem;
+            padding: 0.75rem;
+            font-size: 10px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body class="dash-body min-h-full font-sans antialiased">
+    <header class="dash-header px-4 py-3 border-b border-[color:var(--dash-border)]">
+        <div class="max-w-2xl mx-auto flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2 min-w-0">
+                <a href="index.html" class="text-slate-400 hover:text-slate-200 transition shrink-0" title="Home">
+                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                </a>
+                <h1 class="font-bold text-lg truncate dash-text">Connection setup</h1>
+            </div>
+            <span id="setupStatusBadge" class="text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-600 text-slate-500">Not saved</span>
+        </div>
+    </header>
+
+    <main class="max-w-2xl mx-auto px-4 py-6 space-y-5 text-xs">
+        <p class="dash-muted text-sm leading-relaxed">
+            Configure <strong class="text-slate-300">Upstash Redis</strong> (required) and optional <strong class="text-slate-300">Google Sheet</strong> — this is the only data in <strong class="text-slate-300">Export config</strong>.
+            Daily <strong class="text-slate-300">total target</strong> and <strong class="text-slate-300">number of lines</strong> are set on the <a href="dashboard.html" class="text-cyan-400 hover:underline">dashboard</a> and stored in Upstash for every browser to pick up.
+        </p>
+
+        <form id="setupForm" class="setup-card p-4 sm:p-5 space-y-4" autocomplete="on" novalidate>
+            <section class="space-y-3">
+                <h2 class="font-semibold text-slate-200 flex items-center gap-2">
+                    <i data-lucide="database" class="w-4 h-4 text-cyan-400"></i> Upstash Redis
+                </h2>
+                <p class="text-[11px] text-slate-500 leading-relaxed">
+                    Create a database at <a href="https://upstash.com/" class="text-cyan-400 hover:underline" target="_blank" rel="noopener noreferrer">upstash.com</a>, open <strong class="text-slate-400">REST API</strong>, copy URL and token. Counters and dashboard share the same database and key prefix.
+                </p>
+                <label class="flex items-start gap-2 cursor-pointer text-[11px] text-slate-400">
+                    <input type="checkbox" id="publishUpstashForCounters" class="mt-0.5 rounded border-slate-600" checked>
+                    <span>Publish URL, token, and key prefix to Redis for <code class="text-slate-400">counter.html</code> devices (trusted networks only).</span>
+                </label>
+                <div class="space-y-2">
+                    <label for="restUrl" class="block text-slate-400 font-medium">REST URL</label>
+                    <input type="url" id="restUrl" autocomplete="off" placeholder="https://xxx.upstash.io" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+                </div>
+                <div class="space-y-2">
+                    <label for="restToken" class="block text-slate-400 font-medium">REST token</label>
+                    <input type="password" id="restToken" name="packtracker-upstash-token" autocomplete="new-password" placeholder="AX…" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+                    <p class="text-[10px] text-slate-500">Read-only token works for the dashboard. Counter sync and reset need write access.</p>
+                </div>
+                <div class="space-y-2">
+                    <label for="keyPrefixBase" class="block text-slate-400 font-medium">Key prefix (base)</label>
+                    <input type="text" id="keyPrefixBase" value="packtracker" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" id="testUpstashBtn" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-semibold rounded-lg transition">Test Upstash</button>
+                    <button type="button" id="importCounterCredsBtn" class="py-2 px-3 bg-slate-800/80 hover:bg-slate-700/50 border border-slate-600 text-slate-300 font-medium rounded-lg transition">Import from counter on this browser</button>
+                </div>
+            </section>
+
+            <section class="pt-2 border-t border-slate-700/60 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <h2 class="font-semibold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="sheet" class="w-4 h-4 text-green-400"></i> Google Sheet sync
+                    </h2>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" id="sheetEnableToggle" class="sr-only peer">
+                        <div class="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
+                    </label>
+                </div>
+                <p class="text-[11px] text-slate-500 leading-relaxed">
+                    Only the Apps Script <strong class="text-slate-400">Web app URL</strong> (<code class="text-slate-400">…/exec</code>) is stored here — not your Google login or Sheet link.
+                </p>
+                <div class="space-y-2">
+                    <label for="sheetWebAppUrl" class="block text-slate-400 font-medium">Web app URL</label>
+                    <input type="url" id="sheetWebAppUrl" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono text-[11px] focus:ring-1 focus:ring-green-500 focus:outline-none">
+                </div>
+                <div class="space-y-2">
+                    <label for="sheetSharedSecret" class="block text-slate-400 font-medium">Shared secret (optional)</label>
+                    <input type="password" id="sheetSharedSecret" autocomplete="new-password" placeholder="Same as SCRIPT_SECRET in Apps Script" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-green-500 focus:outline-none">
+                </div>
+                <button type="button" id="sheetTestPostBtn" class="py-2 px-3 bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/40 rounded-lg font-semibold transition">Test Sheet post</button>
+                <details class="text-[11px] text-slate-400 group">
+                    <summary class="cursor-pointer text-slate-300 font-medium hover:text-green-300">Google Sheet setup instructions</summary>
+                    <ol class="list-decimal list-inside space-y-1.5 mt-2 text-slate-500 leading-relaxed">
+                        <li>Create a Google Sheet → <strong class="text-slate-400">Extensions → Apps Script</strong>.</li>
+                        <li>Paste the script below (or from <code class="text-slate-400">google-sheet/Code.gs</code> in this repo).</li>
+                        <li>Optional: set <code class="text-slate-400">SCRIPT_SECRET</code> in the script and the same value above.</li>
+                        <li>Run <code class="text-slate-400">initializeSheets</code> once, then deploy <strong class="text-slate-400">Web app</strong> (Execute as Me, Anyone).</li>
+                        <li>Copy the URL ending in <code class="text-slate-400">/exec</code> into the field above.</li>
+                    </ol>
+                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-slate-400 font-medium">Apps Script (<code>Code.gs</code>)</span>
+                        <button type="button" id="sheetCopyScriptBtn" class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/40 rounded-lg font-semibold text-[10px] transition">
+                            <i data-lucide="clipboard-copy" class="w-3.5 h-3.5"></i>
+                            <span id="sheetCopyScriptBtnLabel">Copy Code.gs</span>
+                        </button>
+                    </div>
+                    <pre id="googleSheetCodeGsDisplay" class="sheet-code-block mt-2" aria-label="Apps Script Code.gs">Loading script…</pre>
+                </details>
+            </section>
+
+            <section class="pt-2 border-t border-slate-700/60 space-y-3">
+                <h2 class="font-semibold text-slate-200 flex items-center gap-2">
+                    <i data-lucide="file-json" class="w-4 h-4 text-amber-400"></i> Move to another browser
+                </h2>
+                <p class="text-[11px] text-slate-500 leading-relaxed">JSON contains <strong class="text-slate-400">Upstash + Google Sheet only</strong> — not targets or line count. Treat it like a password.</p>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" id="exportConfigBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-slate-800/80 hover:bg-slate-700/50 border border-slate-600 text-slate-300 rounded-lg font-semibold transition">Export config</button>
+                    <button type="button" id="importConfigBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-slate-800/80 hover:bg-slate-700/50 border border-slate-600 text-slate-300 rounded-lg font-semibold transition">Import config</button>
+                </div>
+                <input type="file" id="importConfigInput" accept="application/json,.json" class="hidden">
+            </section>
+
+            <p id="setupMessage" class="text-[11px] text-slate-500 min-h-[1rem]"></p>
+
+            <div class="flex flex-wrap gap-2 pt-1">
+                <button type="submit" id="saveSetupBtn" class="flex-1 min-w-[10rem] py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition">Save connection</button>
+                <a id="continueLink" href="dashboard.html" class="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-semibold rounded-lg transition text-center">Continue to dashboard</a>
+            </div>
+        </form>
+    </main>
+
+    <script>
+        const el = {
+            restUrl: document.getElementById('restUrl'),
+            restToken: document.getElementById('restToken'),
+            keyPrefixBase: document.getElementById('keyPrefixBase'),
+            publishUpstashForCounters: document.getElementById('publishUpstashForCounters'),
+            sheetEnableToggle: document.getElementById('sheetEnableToggle'),
+            sheetWebAppUrl: document.getElementById('sheetWebAppUrl'),
+            sheetSharedSecret: document.getElementById('sheetSharedSecret'),
+            testUpstashBtn: document.getElementById('testUpstashBtn'),
+            sheetTestPostBtn: document.getElementById('sheetTestPostBtn'),
+            importCounterCredsBtn: document.getElementById('importCounterCredsBtn'),
+            exportConfigBtn: document.getElementById('exportConfigBtn'),
+            importConfigBtn: document.getElementById('importConfigBtn'),
+            importConfigInput: document.getElementById('importConfigInput'),
+            setupMessage: document.getElementById('setupMessage'),
+            setupStatusBadge: document.getElementById('setupStatusBadge'),
+            continueLink: document.getElementById('continueLink'),
+            googleSheetCodeGsDisplay: document.getElementById('googleSheetCodeGsDisplay'),
+            sheetCopyScriptBtn: document.getElementById('sheetCopyScriptBtn'),
+            sheetCopyScriptBtnLabel: document.getElementById('sheetCopyScriptBtnLabel')
+        };
+
+        function returnUrl() {
+            const p = new URLSearchParams(window.location.search).get('return');
+            if (!p || p.includes('://')) return 'dashboard.html';
+            return p.replace(/^\//, '') || 'dashboard.html';
+        }
+
+        function readForm() {
+            return {
+                restUrl: el.restUrl.value,
+                restToken: el.restToken.value,
+                keyPrefixBase: el.keyPrefixBase.value,
+                publishUpstashForCounters: el.publishUpstashForCounters.checked,
+                sheet: {
+                    enabled: el.sheetEnableToggle.checked,
+                    webAppUrl: el.sheetWebAppUrl.value,
+                    sharedSecret: el.sheetSharedSecret.value
+                }
+            };
+        }
+
+        function applyToForm(conn) {
+            el.restUrl.value = conn.restUrl || '';
+            el.restToken.value = conn.restToken || '';
+            el.keyPrefixBase.value = conn.keyPrefixBase || 'packtracker';
+            el.publishUpstashForCounters.checked = conn.publishUpstashForCounters !== false;
+            el.sheetEnableToggle.checked = !!conn.sheet?.enabled;
+            el.sheetWebAppUrl.value = conn.sheet?.webAppUrl || '';
+            el.sheetSharedSecret.value = conn.sheet?.sharedSecret || '';
+            updateBadge();
+        }
+
+        function setMessage(text, kind) {
+            const classes = {
+                muted: 'text-[11px] text-slate-500 min-h-[1rem]',
+                ok: 'text-[11px] text-emerald-400 min-h-[1rem]',
+                error: 'text-[11px] text-rose-400 min-h-[1rem]',
+                busy: 'text-[11px] text-amber-400 min-h-[1rem]'
+            };
+            el.setupMessage.className = classes[kind] || classes.muted;
+            el.setupMessage.textContent = text;
+        }
+
+        function updateBadge() {
+            const ok = PackTrackerConnection.isConfigured(readForm());
+            el.setupStatusBadge.textContent = ok ? 'Upstash ready' : 'Upstash incomplete';
+            el.setupStatusBadge.className = ok
+                ? 'text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
+                : 'text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-600 text-slate-500';
+        }
+
+        async function pingUpstash(conn) {
+            const base = PackTrackerConnection.normalizeRestUrl(conn.restUrl);
+            const token = PackTrackerConnection.normalizeRestToken(conn.restToken);
+            if (!base || !token) throw new Error('REST URL and token required.');
+            const res = await fetch(base, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(['PING'])
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            return data.result || 'PONG';
+        }
+
+        async function testSheetPost(conn) {
+            const url = PackTrackerConnection.normalizeSheetWebAppUrl(conn.sheet.webAppUrl);
+            if (!url) throw new Error('Add Web app URL first.');
+            const payload = {
+                recordedAt: new Date().toISOString(),
+                totalCount: 0,
+                totalTarget: 0,
+                remaining: 0,
+                lineCount: 0,
+                keyPrefixBase: conn.keyPrefixBase,
+                lines: [],
+                test: true
+            };
+            const secret = (conn.sheet.sharedSecret || '').trim();
+            if (secret) payload.secret = secret;
+            const form = new URLSearchParams();
+            form.set('payload', JSON.stringify(payload));
+            const res = await fetch(url, {
+                method: 'POST',
+                redirect: 'follow',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                body: form.toString()
+            });
+            const text = await res.text();
+            let data;
+            try { data = JSON.parse(text); } catch (e) { data = { ok: res.ok }; }
+            if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        async function loadCodeGs() {
+            try {
+                const res = await fetch('google-sheet/Code.gs');
+                if (res.ok) {
+                    el.googleSheetCodeGsDisplay.textContent = await res.text();
+                    return;
+                }
+            } catch (e) { /* fallback */ }
+            el.googleSheetCodeGsDisplay.textContent = 'Open google-sheet/Code.gs in this project folder and paste into Apps Script.';
+        }
+
+        document.getElementById('setupForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const conn = PackTrackerConnection.save(readForm());
+            setMessage('Saving…', 'busy');
+            if (!PackTrackerConnection.isConfigured(conn)) {
+                setMessage('Saved locally. Add Upstash URL and token to use the dashboard.', 'ok');
+                updateBadge();
+                return;
+            }
+            setMessage('Connection saved. Use Continue when ready.', 'ok');
+            updateBadge();
+        });
+
+        el.testUpstashBtn.addEventListener('click', async () => {
+            setMessage('Testing Upstash…', 'busy');
+            try {
+                const pong = await pingUpstash(readForm());
+                setMessage(`Upstash OK (${pong})`, 'ok');
+            } catch (err) {
+                setMessage(err.message || 'Test failed', 'error');
+            }
+        });
+
+        el.sheetTestPostBtn.addEventListener('click', async () => {
+            setMessage('Posting test row…', 'busy');
+            try {
+                await testSheetPost(readForm());
+                setMessage('Sheet test post OK — check Live and Log tabs.', 'ok');
+            } catch (err) {
+                setMessage(err.message || 'Sheet test failed', 'error');
+            }
+        });
+
+        el.importCounterCredsBtn.addEventListener('click', () => {
+            try {
+                const imported = PackTrackerConnection.importFromCounterStorage();
+                if (!imported) {
+                    setMessage('No counter Upstash config in this browser.', 'error');
+                    return;
+                }
+                applyToForm(imported);
+                setMessage('Imported from counter — click Save connection.', 'ok');
+            } catch (e) {
+                setMessage('Import failed.', 'error');
+            }
+        });
+
+        el.exportConfigBtn.addEventListener('click', () => {
+            PackTrackerConnection.downloadConfigFile(readForm());
+            setMessage('Config file downloaded.', 'ok');
+        });
+
+        el.importConfigBtn.addEventListener('click', () => el.importConfigInput.click());
+        el.importConfigInput.addEventListener('change', async () => {
+            const file = el.importConfigInput.files?.[0];
+            el.importConfigInput.value = '';
+            if (!file) return;
+            try {
+                const imported = await PackTrackerConnection.importConfigFile(file);
+                applyToForm(imported.connection);
+                setMessage('Imported connection. Open the dashboard — target and lines load from Upstash automatically.', 'ok');
+            } catch (e) {
+                setMessage(e.message || 'Import failed', 'error');
+            }
+        });
+
+        el.sheetCopyScriptBtn?.addEventListener('click', async () => {
+            const text = el.googleSheetCodeGsDisplay.textContent.trim();
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                el.sheetCopyScriptBtnLabel.textContent = 'Copied!';
+                setTimeout(() => { el.sheetCopyScriptBtnLabel.textContent = 'Copy Code.gs'; }, 2000);
+            } catch (e) {
+                prompt('Copy Apps Script:', text);
+            }
+        });
+
+        ['restUrl', 'restToken', 'keyPrefixBase'].forEach(id => {
+            document.getElementById(id)?.addEventListener('input', updateBadge);
+        });
+
+        window.addEventListener('load', () => {
+            if (window.PackTrackerTheme) PackTrackerTheme.initSelect?.();
+            applyToForm(PackTrackerConnection.load());
+            el.continueLink.href = returnUrl();
+            loadCodeGs();
+            if (window.lucide) lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

@@ -59,6 +59,10 @@
             overscroll-behavior: contain;
             -webkit-overflow-scrolling: touch;
         }
+        #setCountModal.set-count-open { opacity: 1; pointer-events: auto; }
+        #setCountModal.set-count-open .set-count-panel { transform: scale(1); }
+        #mainCountDisplay.set-count-tappable { cursor: pointer; }
+        #mainCountDisplay.set-count-tappable:hover { opacity: 0.92; }
     </style>
 </head>
 <body class="h-full flex flex-col font-sans antialiased overflow-hidden selection:theme">
@@ -216,19 +220,36 @@
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2 w-full max-w-md mt-3">
-                    <button id="manualAddBtn" class="flex-1 py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                <div class="flex flex-wrap items-center gap-2 w-full max-w-md mt-3">
+                    <button id="manualAddBtn" class="flex-1 min-w-[7rem] py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
                         <i data-lucide="plus" class="w-4 h-4"></i> +1 Manual
                     </button>
-                    <button id="manualSubBtn" class="flex-1 py-2 px-3 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                    <button id="manualSubBtn" class="flex-1 min-w-[7rem] py-2 px-3 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
                         <i data-lucide="minus" class="w-4 h-4"></i> −1 Correction
+                    </button>
+                    <button type="button" id="setCountBtn" class="flex-1 min-w-[7rem] py-2 px-3 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition" title="Set count when production started before tracking">
+                        <i data-lucide="hash" class="w-4 h-4"></i> Set count
                     </button>
                     <button id="resetCountBtn" class="py-2 px-3 bg-slate-800 hover:bg-rose-900/30 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-700/50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
                         <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reset
                     </button>
                 </div>
+                <p class="text-[10px] text-slate-500 mt-2 max-w-md text-center leading-relaxed">Use <strong class="text-slate-400">Set count</strong> if boxes were already packed before the counter was started (e.g. enter 100). Syncs to Upstash when enabled.</p>
             </div>
         </section>
+
+    <div id="setCountModal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 opacity-0 pointer-events-none transition-opacity" role="dialog" aria-modal="true" aria-labelledby="setCountModalTitle">
+        <div class="set-count-panel max-w-xs w-full rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl p-5 space-y-4 transform scale-95 transition-transform">
+            <h3 id="setCountModalTitle" class="font-semibold text-slate-100 text-sm">Set pack count</h3>
+            <p class="text-[11px] text-slate-500 leading-relaxed">Enter how many boxes are already counted for this line. Camera and manual +1 will continue from this number.</p>
+            <label for="setCountInput" class="block text-[11px] text-slate-400 font-medium">Current count</label>
+            <input type="number" inputmode="numeric" min="0" step="1" id="setCountInput" class="w-full bg-slate-950 border border-slate-700 text-slate-100 rounded-xl px-3 py-2.5 text-2xl font-mono font-bold text-center focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+            <div class="flex gap-2">
+                <button type="button" id="setCountCancelBtn" class="flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-sm font-semibold rounded-xl transition">Cancel</button>
+                <button type="button" id="setCountApplyBtn" class="flex-1 py-2.5 px-3 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition">Apply</button>
+            </div>
+        </div>
+    </div>
 
         <!-- Right Column: Activity Log -->
         <section class="lg:col-span-5 flex flex-col min-h-0 flex-1 overflow-hidden">
@@ -567,6 +588,11 @@
             audioToggle: document.getElementById('audioToggle'),
             manualAddBtn: document.getElementById('manualAddBtn'),
             manualSubBtn: document.getElementById('manualSubBtn'),
+            setCountBtn: document.getElementById('setCountBtn'),
+            setCountModal: document.getElementById('setCountModal'),
+            setCountInput: document.getElementById('setCountInput'),
+            setCountApplyBtn: document.getElementById('setCountApplyBtn'),
+            setCountCancelBtn: document.getElementById('setCountCancelBtn'),
             resetCountBtn: document.getElementById('resetCountBtn'),
             exportCsvBtn: document.getElementById('exportCsvBtn'),
             exportJsonBtn: document.getElementById('exportJsonBtn'),
@@ -2682,6 +2708,83 @@
             return true;
         }
 
+        function parseDirectCountInput(raw) {
+            const cleaned = String(raw ?? '').trim().replace(/,/g, '');
+            if (cleaned === '') return NaN;
+            const n = Math.floor(Number(cleaned));
+            return Number.isFinite(n) && n >= 0 ? n : NaN;
+        }
+
+        function setCountDirect(newCount, { skipConfirmOverCap = false } = {}) {
+            const n = parseDirectCountInput(newCount);
+            if (!Number.isFinite(n)) {
+                showDetectionOverlay('ENTER A VALID COUNT (0 OR MORE)');
+                return false;
+            }
+            const cap = state.lineTargetCap;
+            if (!skipConfirmOverCap && cap > 0 && n > cap) {
+                if (!confirm(`Count ${n} is above the line target (${cap}). Set anyway?`)) {
+                    return false;
+                }
+            }
+            const prev = state.count;
+            if (prev === n) {
+                showDetectionOverlay(`COUNT ALREADY ${n}`);
+                return true;
+            }
+
+            state.count = n;
+            if (n > 0 && !state.sessionStartTime) {
+                state.sessionStartTime = Date.now();
+                startSessionTimer();
+            }
+            if (n === 0) {
+                state.sessionStartTime = null;
+                if (state.sessionIntervalId) {
+                    clearInterval(state.sessionIntervalId);
+                    state.sessionIntervalId = null;
+                }
+                if (elements.sessionTimer) elements.sessionTimer.innerText = '00:00';
+            }
+
+            const timestamp = new Date().toLocaleString([], {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            const logItem = {
+                id: state.count,
+                timestamp,
+                type: 'Manual count set',
+                code: `${prev} → ${n}`,
+                mode: 'Manual'
+            };
+            state.logs.unshift(logItem);
+            updateCounterUI();
+            renderLogs();
+            saveToLocalStorage();
+            UpstashSync.pushLogEntry(logItem, 'set_count');
+            showDetectionOverlay(`COUNT SET TO ${n}`);
+            return true;
+        }
+
+        function openSetCountModal() {
+            if (!elements.setCountModal || !elements.setCountInput) return;
+            elements.setCountInput.value = String(state.count);
+            elements.setCountModal.classList.add('set-count-open');
+            setTimeout(() => {
+                elements.setCountInput.focus();
+                elements.setCountInput.select();
+            }, 80);
+        }
+
+        function closeSetCountModal() {
+            elements.setCountModal?.classList.remove('set-count-open');
+        }
+
         function decrementCount(metadata = {}) {
             if (state.count <= 0) {
                 showDetectionOverlay('COUNT ALREADY AT ZERO');
@@ -3030,6 +3133,28 @@
                     mode: 'Manual'
                 });
                 AudioEngine.playBeep('qr');
+            });
+
+            elements.setCountBtn?.addEventListener('click', openSetCountModal);
+            elements.mainCountDisplay?.classList.add('set-count-tappable');
+            elements.mainCountDisplay?.setAttribute('title', 'Tap to set count');
+            elements.mainCountDisplay?.addEventListener('click', openSetCountModal);
+            elements.setCountCancelBtn?.addEventListener('click', closeSetCountModal);
+            elements.setCountModal?.addEventListener('click', (e) => {
+                if (e.target === elements.setCountModal) closeSetCountModal();
+            });
+            elements.setCountApplyBtn?.addEventListener('click', () => {
+                if (setCountDirect(elements.setCountInput.value)) {
+                    closeSetCountModal();
+                    AudioEngine.playBeep('box');
+                }
+            });
+            elements.setCountInput?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    elements.setCountApplyBtn?.click();
+                }
+                if (e.key === 'Escape') closeSetCountModal();
             });
 
             elements.resetCountBtn.addEventListener('click', () => {

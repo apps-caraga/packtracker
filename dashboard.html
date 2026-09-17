@@ -41,6 +41,20 @@
         }
         #counterQrModal.counter-qr-open { opacity: 1; pointer-events: auto; }
         #counterQrModal.counter-qr-open .counter-qr-panel { transform: scale(1); opacity: 1; }
+        .sheet-code-block {
+            max-height: 14rem;
+            overflow: auto;
+            background: var(--dash-surface, #020617);
+            border: 1px solid var(--dash-border, #334155);
+            border-radius: 0.75rem;
+            padding: 0.75rem;
+            font-family: ui-monospace, monospace;
+            font-size: 10px;
+            line-height: 1.45;
+            color: #cbd5e1;
+            white-space: pre;
+            tab-size: 2;
+        }
     </style>
 </head>
 <body class="dash-body min-h-full flex flex-col font-sans antialiased selection:theme">
@@ -291,13 +305,23 @@
                     <summary class="cursor-pointer text-slate-300 font-medium hover:text-green-300">Google Sheet setup instructions</summary>
                     <ol class="list-decimal list-inside space-y-1.5 mt-2 text-slate-500 leading-relaxed pl-0.5">
                         <li>Create a Google Sheet → <strong class="text-slate-400">Extensions → Apps Script</strong>.</li>
-                        <li>Paste the project script from <code class="text-slate-400">google-sheet/Code.gs</code> in this repo (see also <code class="text-slate-400">google-sheet/SETUP.md</code>).</li>
+                        <li>Delete the default <code class="text-slate-400">Code.gs</code> contents and paste the script below — use <strong class="text-slate-400">Copy Code.gs</strong> (same as <code class="text-slate-400">google-sheet/Code.gs</code> in this repo).</li>
                         <li>Optional: set <code class="text-slate-400">SCRIPT_SECRET</code> in the script and the same value below. Leave both empty to test.</li>
                         <li>After code changes, deploy a <strong class="text-slate-400">New version</strong> of the web app or posts may not run updated code.</li>
                         <li>Run <code class="text-slate-400">initializeSheets</code> once (approve permissions).</li>
                         <li><strong class="text-slate-400">Deploy → New deployment → Web app</strong>: Execute as <em>Me</em>, access <em>Anyone</em>.</li>
                         <li>Copy the <strong class="text-slate-400">Web app URL</strong> ending in <code class="text-slate-400">/exec</code> into this dashboard.</li>
                     </ol>
+                    <div class="mt-3 space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <span class="text-slate-400 font-medium">Apps Script (<code class="text-slate-500">Code.gs</code>)</span>
+                            <button type="button" id="sheetCopyScriptBtn" class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/40 rounded-lg font-semibold text-[10px] transition">
+                                <i data-lucide="clipboard-copy" class="w-3.5 h-3.5 shrink-0"></i>
+                                <span id="sheetCopyScriptBtnLabel">Copy Code.gs</span>
+                            </button>
+                        </div>
+                        <pre id="googleSheetCodeGsDisplay" class="sheet-code-block" aria-label="Apps Script Code.gs"></pre>
+                    </div>
                     <p class="mt-2 text-slate-500">Sheets created: <strong class="text-slate-400">Live</strong> (latest row) and <strong class="text-slate-400">Log</strong> (append history).</p>
                 </details>
             </div>
@@ -337,6 +361,125 @@
         </form>
     </aside>
 
+    <script type="text/plain" id="googleSheetCodeGsSource">/**
+ * PackTracker Google Sheet receiver — paste into Extensions → Apps Script
+ * bound to your spreadsheet. Deploy as Web app (/exec).
+ *
+ * Optional: set SCRIPT_SECRET and the same value in the dashboard.
+ */
+const SCRIPT_SECRET = '';
+
+const LIVE_SHEET = 'Live';
+const LOG_SHEET = 'Log';
+
+const HEADERS = [
+  'Recorded At',
+  'Total Count',
+  'Total Target',
+  'Remaining',
+  'Line Count',
+  'Key Prefix',
+  'Lines',
+  'Test Post'
+];
+
+function doPost(e) {
+  try {
+    const raw = e && e.parameter && e.parameter.payload;
+    if (!raw) {
+      return jsonResponse({ ok: false, error: 'Missing payload parameter' });
+    }
+    const data = JSON.parse(raw);
+    if (SCRIPT_SECRET && String(data.secret || '') !== SCRIPT_SECRET) {
+      return jsonResponse({ ok: false, error: 'Unauthorized' });
+    }
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const row = payloadToRow(data);
+    writeLiveRow(ss, row);
+    appendLogRow(ss, row);
+    return jsonResponse({ ok: true });
+  } catch (err) {
+    return jsonResponse({ ok: false, error: String(err.message || err) });
+  }
+}
+
+function doGet() {
+  return jsonResponse({
+    ok: true,
+    service: 'PackTracker Sheet sync',
+    hint: 'POST application/x-www-form-urlencoded with payload=JSON'
+  });
+}
+
+function initializeSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const live = ensureSheet(ss, LIVE_SHEET);
+  const log = ensureSheet(ss, LOG_SHEET);
+  live.clearContents();
+  log.clearContents();
+  live.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+  log.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+  live.setFrozenRows(1);
+  log.setFrozenRows(1);
+  SpreadsheetApp.flush();
+}
+
+function ensureSheet(ss, name) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+  }
+  return sheet;
+}
+
+function payloadToRow(data) {
+  const linesText = formatLines(data.lines);
+  return [
+    data.recordedAt || new Date().toISOString(),
+    Number(data.totalCount) || 0,
+    Number(data.totalTarget) || 0,
+    Number(data.remaining) || 0,
+    Number(data.lineCount) || 0,
+    String(data.keyPrefixBase || ''),
+    linesText,
+    data.test ? 'yes' : 'no'
+  ];
+}
+
+function formatLines(lines) {
+  if (!lines || !lines.length) return '';
+  return lines
+    .map(function (l) {
+      return 'L' + l.line + ': ' + (l.count || 0) + '/' + (l.target || 0);
+    })
+    .join(' | ');
+}
+
+function writeLiveRow(ss, row) {
+  const sheet = ensureSheet(ss, LIVE_SHEET);
+  if (sheet.getLastRow() < 1) {
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    sheet.setFrozenRows(1);
+  }
+  sheet.getRange(2, 1, 2, HEADERS.length).setValues([row]);
+}
+
+function appendLogRow(ss, row) {
+  const sheet = ensureSheet(ss, LOG_SHEET);
+  if (sheet.getLastRow() < 1) {
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    sheet.setFrozenRows(1);
+  }
+  sheet.appendRow(row);
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+</script>
+
     <script>
         const STORAGE_KEY = 'packtracker_dashboard';
         const COUNTER_UPSTASH_KEY = 'packtracker_upstash';
@@ -368,6 +511,10 @@
             sheetWebAppUrl: document.getElementById('sheetWebAppUrl'),
             sheetSharedSecret: document.getElementById('sheetSharedSecret'),
             sheetTestPostBtn: document.getElementById('sheetTestPostBtn'),
+            sheetCopyScriptBtn: document.getElementById('sheetCopyScriptBtn'),
+            sheetCopyScriptBtnLabel: document.getElementById('sheetCopyScriptBtnLabel'),
+            googleSheetCodeGsDisplay: document.getElementById('googleSheetCodeGsDisplay'),
+            googleSheetCodeGsSource: document.getElementById('googleSheetCodeGsSource'),
             sheetSyncHint: document.getElementById('sheetSyncHint'),
             totalCount: document.getElementById('totalCount'),
             totalTargetDisplay: document.getElementById('totalTargetDisplay'),
@@ -1237,6 +1384,76 @@
             return payload;
         }
 
+        function getGoogleSheetAppsScriptSource() {
+            const fromTemplate = el.googleSheetCodeGsSource?.textContent.trim();
+            if (fromTemplate) return fromTemplate;
+            return el.googleSheetCodeGsDisplay?.textContent.trim() || '';
+        }
+
+        async function copyTextToClipboard(text) {
+            if (!text) return false;
+            try {
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                }
+            } catch (e) {
+                /* fallback below */
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                return document.execCommand('copy');
+            } catch (e) {
+                return false;
+            } finally {
+                document.body.removeChild(ta);
+            }
+        }
+
+        function flashSheetCopyButton() {
+            const label = el.sheetCopyScriptBtnLabel;
+            const btn = el.sheetCopyScriptBtn;
+            if (!label || !btn) return;
+            const prev = label.textContent;
+            label.textContent = 'Copied!';
+            btn.disabled = true;
+            btn.classList.add('ring-2', 'ring-green-400/40');
+            window.setTimeout(() => {
+                label.textContent = prev;
+                btn.disabled = false;
+                btn.classList.remove('ring-2', 'ring-green-400/40');
+            }, 2000);
+        }
+
+        function initSheetSetupInstructions() {
+            const src = el.googleSheetCodeGsSource;
+            const pre = el.googleSheetCodeGsDisplay;
+            if (src && pre) {
+                pre.textContent = src.textContent.trim();
+            }
+            el.sheetCopyScriptBtn?.addEventListener('click', async () => {
+                const text = getGoogleSheetAppsScriptSource();
+                if (!text) {
+                    setSheetSyncHint('Script source missing — reload the page.', 'error');
+                    return;
+                }
+                const ok = await copyTextToClipboard(text);
+                if (ok) {
+                    flashSheetCopyButton();
+                    setSheetSyncHint('Apps Script copied — paste into Apps Script Code.gs.', 'ok');
+                } else {
+                    prompt('Copy this Apps Script into Code.gs:', text);
+                }
+            });
+            if (window.lucide) lucide.createIcons();
+        }
+
         function setSheetSyncHint(text, kind = 'muted') {
             const classes = {
                 muted: 'text-[10px] text-slate-500 min-h-[1rem]',
@@ -1692,6 +1909,7 @@
         window.addEventListener('load', () => {
             if (window.DashboardTheme) DashboardTheme.initSelect();
             if (window.lucide) lucide.createIcons();
+            initSheetSetupInstructions();
             PasskeyGate.init();
         });
     </script>

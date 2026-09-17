@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PackTracker PWA - Box & Barcode Counter</title>
-    
+    <link href="data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAYAAABPYyMiAAAABmJLR0T///////8JWPfcAAAACXBIWXMAAABIAAAASABGyWs+AAAAF0lEQVRIx2NgGAWjYBSMglEwCkbBSAcACBAAAeaR9cIAAAAASUVORK5CYII=" rel="icon" type="image/x-icon" />
+
     <!-- PWA Primary Meta Tags -->
     <meta name="theme-color" content="#0f172a">
     <script src="dashboard-theme.js"></script>
@@ -278,7 +279,7 @@
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
-        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <form id="counterSettingsForm" class="flex-1 overflow-y-auto p-4 space-y-4" autocomplete="on" novalidate>
             <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 space-y-2 text-xs text-slate-300">
                 <label for="themeSelect" class="block text-slate-400 font-medium">Theme</label>
                 <select id="themeSelect" class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"></select>
@@ -438,7 +439,7 @@
                     </div>
                     <div>
                         <label for="redisRestToken" class="block text-slate-400 font-medium mb-1">REST token (Standard / write)</label>
-                        <input type="password" id="redisRestToken" autocomplete="off" placeholder="AX..." class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none font-mono">
+                        <input type="password" id="redisRestToken" name="packtracker-upstash-token" autocomplete="new-password" placeholder="AX..." class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none font-mono">
                     </div>
                     <div>
                         <label for="redisKeyPrefix" class="block text-slate-400 font-medium mb-1">Key prefix (base)</label>
@@ -458,7 +459,7 @@
                     <span id="redisSyncStatus" class="text-[11px] text-slate-500">Off</span>
                 </div>
             </div>
-        </div>
+        </form>
     </aside>
 
     <script>
@@ -691,7 +692,7 @@
         function applyUpstashBootstrapFromUrl() {
             const params = new URLSearchParams(window.location.search);
             const encoded = params.get('upstash_bootstrap');
-            if (!encoded) return;
+            if (!encoded) return false;
             try {
                 const pad = encoded.length % 4 ? '='.repeat(4 - (encoded.length % 4)) : '';
                 const json = atob(encoded.replace(/-/g, '+').replace(/_/g, '/') + pad);
@@ -704,8 +705,10 @@
                 const clean = new URL(window.location.href);
                 clean.search = params.toString();
                 window.history.replaceState({}, '', clean.pathname + (clean.search ? `?${clean.search}` : '') + clean.hash);
+                return true;
             } catch (e) {
                 console.warn('Upstash bootstrap link invalid', e);
+                return false;
             }
         }
 
@@ -768,8 +771,7 @@
 
             loadConfig() {
                 try {
-                    const lineFromUrl = normalizeLineNumber(new URLSearchParams(window.location.search).get('line'));
-                    applyUpstashBootstrapFromUrl();
+                    const lineFromUrl = lineNumberFromUrl();
                     const raw = localStorage.getItem(UPSTASH_CONFIG_KEY);
                     if (raw) {
                         const parsed = JSON.parse(raw);
@@ -790,6 +792,9 @@
                     if (state.upstash.useDashboardConfig) {
                         mergeFromDashboardLocalStorage(true);
                     }
+                    const hadBootstrap = applyUpstashBootstrapFromUrl();
+                    if (lineFromUrl) state.upstash.lineNumber = lineFromUrl;
+                    if (hadBootstrap) this.saveConfig();
                 } catch (e) {
                     console.warn('Unable to load Upstash config', e);
                 }
@@ -2882,6 +2887,10 @@
         }
 
         function setupEventListeners() {
+            document.getElementById('counterSettingsForm')?.addEventListener('submit', (e) => {
+                e.preventDefault();
+            });
+
             SettingsPanel.bind();
             UpstashSync.bindEvents();
 

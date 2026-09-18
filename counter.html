@@ -125,6 +125,7 @@
                 <button id="passkeyLockBtn" type="button" title="Lock app" class="hidden p-2 text-slate-400 hover:text-amber-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition">
                     <i data-lucide="lock" class="w-4 h-4"></i>
                 </button>
+                <span id="productionDayBadge" class="hidden text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-600 text-slate-500 bg-slate-900/60">CLOSED</span>
                 <button id="settingsOpenBtn" type="button" title="Settings" class="p-2 text-slate-400 hover:text-emerald-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition">
                     <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
                 </button>
@@ -156,6 +157,16 @@
                 <div id="detectionOverlay" class="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500/90 text-white font-bold text-sm sm:text-base rounded-full shadow-lg border border-emerald-300/40 backdrop-blur opacity-0 transition-opacity duration-200 pointer-events-none flex items-center gap-2 z-30">
                     <i data-lucide="scan-line" class="w-5 h-5 animate-spin"></i>
                     <span id="detectionOverlayText">PACK DETECTED!</span>
+                </div>
+
+                <div id="productionClosedBanner" class="hidden absolute inset-x-0 top-1/2 -translate-y-1/2 z-40 px-4 pointer-events-none flex justify-center">
+                    <div class="max-w-md w-full text-center px-4 py-3 rounded-xl bg-rose-950/92 border-2 border-rose-500/70 shadow-2xl backdrop-blur-sm">
+                        <p class="text-rose-200 font-bold text-sm sm:text-base uppercase tracking-wide flex items-center justify-center gap-2">
+                            <i data-lucide="circle-slash" class="w-5 h-5 shrink-0"></i>
+                            Production line closed
+                        </p>
+                        <p id="productionClosedBannerDetail" class="text-[11px] sm:text-xs text-rose-100/90 mt-1.5 leading-snug">Not counting boxes. Open the day on the dashboard to resume.</p>
+                    </div>
                 </div>
 
                 <!-- Camera / system status (top left) -->
@@ -208,6 +219,7 @@
                     <p id="lineTargetLabel" class="hidden text-lg sm:text-xl font-bold font-mono text-amber-300/90 tabular-nums">/ 11</p>
                 </div>
                 <p id="lineTargetStatus" class="hidden text-[11px] text-emerald-400/90 font-semibold uppercase tracking-wide mb-1">Line target met — counting paused</p>
+                <p id="productionClosedStatus" class="hidden text-[11px] text-slate-400 font-semibold uppercase tracking-wide mb-1">Production closed — open the day on the dashboard to count</p>
 
                 <div class="grid grid-cols-2 gap-3 w-full max-w-md mt-2 pt-3 border-t border-slate-700/60 count-display-divider text-xs">
                     <div class="count-display-stat bg-slate-900/50 p-2.5 rounded-xl border border-slate-800 flex flex-col items-center">
@@ -548,6 +560,13 @@
             },
 
             lineTargetCap: 0,
+            dayDate: '',
+            dayStatus: 'closed',
+            dayClosedAt: '',
+            dayAutoClose: true,
+            productionMetaLoaded: false,
+            dashboardMetaBase: '',
+            lastProductionClosedNotifyAt: 0,
             dashboardTargetPollId: null,
             lastAckDashboardResetAt: '',
             /** Last :updatedAt value read from or written to Upstash for this line. */
@@ -568,6 +587,10 @@
             mainCountDisplay: document.getElementById('mainCountDisplay'),
             lineTargetLabel: document.getElementById('lineTargetLabel'),
             lineTargetStatus: document.getElementById('lineTargetStatus'),
+            productionClosedStatus: document.getElementById('productionClosedStatus'),
+            productionDayBadge: document.getElementById('productionDayBadge'),
+            productionClosedBanner: document.getElementById('productionClosedBanner'),
+            productionClosedBannerDetail: document.getElementById('productionClosedBannerDetail'),
             ratePerMin: document.getElementById('ratePerMin'),
             sessionTimer: document.getElementById('sessionTimer'),
             sensitivitySlider: document.getElementById('sensitivitySlider'),
@@ -688,9 +711,112 @@
             return Array.from({ length: lines }, (_, i) => base + (i < remainder ? 1 : 0));
         }
 
+        function dashboardMetaKeyBases() {
+            const bases = new Set();
+            if (state.dashboardMetaBase) bases.add(state.dashboardMetaBase);
+            bases.add(parseKeyPrefixParts(state.upstash.keyPrefix || 'packtracker').base);
+            bases.add('packtracker');
+            try {
+                if (window.PackTrackerConnection?.load) {
+                    const c = PackTrackerConnection.load();
+                    if (c?.keyPrefixBase) bases.add(String(c.keyPrefixBase).replace(/:/g, '').trim());
+                }
+            } catch (e) { /* ignore */ }
+            return [...bases].filter(Boolean);
+        }
+
         function dashboardMetaKey(suffix) {
-            const base = parseKeyPrefixParts(state.upstash.keyPrefix || 'packtracker').base;
+            const base = state.dashboardMetaBase
+                || parseKeyPrefixParts(state.upstash.keyPrefix || 'packtracker').base;
             return `${base}_dashboard:${suffix}`;
+        }
+
+        function mergeConnectionCredentialsIntoUpstash() {
+            try {
+                if (window.PackTrackerConnection?.migrateFromLegacyDashboard) {
+                    PackTrackerConnection.migrateFromLegacyDashboard();
+                }
+                const fromConn = window.PackTrackerConnection?.load?.()
+                    || (() => {
+                        const raw = localStorage.getItem(CONNECTION_STORAGE_KEY);
+                        return raw ? JSON.parse(raw) : null;
+                    })();
+                if (!fromConn) return;
+                if (!state.upstash.restUrl && fromConn.restUrl) {
+                    state.upstash.restUrl = fromConn.restUrl;
+                }
+                if (!state.upstash.restToken && fromConn.restToken) {
+                    state.upstash.restToken = fromConn.restToken;
+                }
+                const prefix = (fromConn.keyPrefixBase || '').replace(/:/g, '').trim();
+                if (prefix && (!state.upstash.keyPrefix || state.upstash.keyPrefix === 'packtracker')) {
+                    state.upstash.keyPrefix = prefix;
+                }
+            } catch (e) {
+                console.warn('Connection merge failed', e);
+            }
+        }
+
+        function counterHasUpstashCredentials() {
+            mergeConnectionCredentialsIntoUpstash();
+            return !!(state.upstash.restUrl && state.upstash.restToken);
+        }
+
+        function localCalendarDate(d = new Date()) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function endOfLocalDayMs(dateStr) {
+            if (!dateStr) return NaN;
+            const parts = dateStr.split('-').map(Number);
+            if (parts.length !== 3) return NaN;
+            return new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999).getTime();
+        }
+
+        function productionIsOpenForToday() {
+            if (state.dayStatus !== 'open') return false;
+            if (!state.dayDate || state.dayDate !== localCalendarDate()) return false;
+            if (state.dayAutoClose && Date.now() > endOfLocalDayMs(state.dayDate)) return false;
+            return true;
+        }
+
+        /** When Upstash REST is configured, day open/closed from the dashboard is enforced (even if sync toggle is off). */
+        function enforcesProductionDayFromUpstash() {
+            return counterHasUpstashCredentials();
+        }
+
+        function productionShowsClosed() {
+            if (!enforcesProductionDayFromUpstash()) return false;
+            if (!state.productionMetaLoaded) return true;
+            return !productionIsOpenForToday();
+        }
+
+        function countingAllowed() {
+            if (!enforcesProductionDayFromUpstash()) return true;
+            if (!state.productionMetaLoaded) return false;
+            return productionIsOpenForToday();
+        }
+
+        function applyProductionMetaFromRedis(dayDate, dayStatus, dayClosedAt, dayAutoCloseRaw) {
+            state.productionMetaLoaded = true;
+            if (dayDate != null && dayDate !== '') {
+                state.dayDate = String(dayDate).trim();
+            }
+            if (dayStatus != null && dayStatus !== '') {
+                const s = String(dayStatus).trim().toLowerCase();
+                if (s === 'open' || s === 'closed') state.dayStatus = s;
+            } else if (dayDate != null || dayClosedAt != null || dayAutoCloseRaw != null) {
+                state.dayStatus = 'closed';
+            }
+            if (dayClosedAt != null) {
+                state.dayClosedAt = String(dayClosedAt || '').trim();
+            }
+            if (dayAutoCloseRaw != null && dayAutoCloseRaw !== '') {
+                state.dayAutoClose = dayAutoCloseRaw === '1' || dayAutoCloseRaw === 'true';
+            }
         }
 
         function computeLineTargetCap(totalTarget, lineCount) {
@@ -706,6 +832,7 @@
         }
 
         function canIncrementCount() {
+            if (!countingAllowed()) return false;
             const cap = state.lineTargetCap;
             if (cap <= 0) return true;
             return state.count < cap;
@@ -742,6 +869,32 @@
                 console.warn('Upstash bootstrap link invalid', e);
                 return false;
             }
+        }
+
+        function notifyProductionLineClosed(reason) {
+            const now = Date.now();
+            if (now - state.lastProductionClosedNotifyAt < 1800) return;
+            state.lastProductionClosedNotifyAt = now;
+            const detail = reason
+                || (state.dayClosedAt
+                    ? `Closed at ${new Date(state.dayClosedAt).toLocaleString()}`
+                    : 'Open the production day on the dashboard to count again.');
+            if (elements.productionClosedBannerDetail) {
+                elements.productionClosedBannerDetail.textContent = detail;
+            }
+            showProductionClosedFlash();
+        }
+
+        function showProductionClosedFlash() {
+            elements.detectionOverlayText.innerText = 'PRODUCTION LINE CLOSED';
+            elements.detectionOverlay.classList.remove('bg-emerald-500/90', 'border-emerald-300/40');
+            elements.detectionOverlay.classList.add('bg-rose-600/95', 'border-rose-300/50');
+            elements.detectionOverlay.style.opacity = '1';
+            setTimeout(() => {
+                elements.detectionOverlay.style.opacity = '0';
+                elements.detectionOverlay.classList.remove('bg-rose-600/95', 'border-rose-300/50');
+                elements.detectionOverlay.classList.add('bg-emerald-500/90', 'border-emerald-300/40');
+            }, 2200);
         }
 
         function mergeFromDashboardLocalStorage(force = false) {
@@ -865,9 +1018,8 @@
                         state.upstash.lineNumber = normalizeLineNumber(parsed.lineNumber) || parts.lineNumber;
                     }
                     if (lineFromUrl) state.upstash.lineNumber = lineFromUrl;
-                    if (state.upstash.useDashboardConfig) {
-                        mergeFromDashboardLocalStorage(true);
-                    }
+                    mergeFromDashboardLocalStorage(state.upstash.useDashboardConfig !== false);
+                    mergeConnectionCredentialsIntoUpstash();
                     const hadBootstrap = applyUpstashBootstrapFromUrl();
                     if (lineFromUrl) state.upstash.lineNumber = lineFromUrl;
                     if (hadBootstrap) this.saveConfig();
@@ -1164,6 +1316,7 @@
 
             async pushLogEntry(logItem, eventKind = 'count') {
                 if (!this.isReady()) return;
+                if (!countingAllowed() && eventKind !== 'count_reset') return;
 
                 const allowZeroPublish = eventKind === 'count_reset'
                     || eventKind === 'decrement'
@@ -1199,24 +1352,53 @@
             },
 
             canQueryRedis() {
-                return !!(state.upstash.restUrl && state.upstash.restToken);
+                return counterHasUpstashCredentials();
+            },
+
+            async resolveDashboardMetaBase() {
+                const bases = dashboardMetaKeyBases();
+                for (const base of bases) {
+                    try {
+                        const probe = await this.request([
+                            ['GET', dashboardMetaKeyForBase(base, 'dayStatus')],
+                            ['GET', dashboardMetaKeyForBase(base, 'totalTarget')],
+                        ], true);
+                        const hasDay = probe[0] != null && String(probe[0]).trim() !== '';
+                        const hasTarget = probe[1] != null && String(probe[1]).trim() !== '';
+                        if (hasDay || hasTarget) {
+                            state.dashboardMetaBase = base;
+                            return base;
+                        }
+                    } catch (e) {
+                        console.warn('Dashboard meta probe failed for', base, e);
+                    }
+                }
+                state.dashboardMetaBase = parseKeyPrefixParts(state.upstash.keyPrefix || 'packtracker').base;
+                return state.dashboardMetaBase;
             },
 
             async refreshLineTargetCap() {
                 if (!this.canQueryRedis()) {
                     state.lineTargetCap = 0;
+                    state.productionMetaLoaded = false;
                     updateCounterUI();
                     return;
                 }
                 try {
+                    await this.resolveDashboardMetaBase();
                     const results = await this.request([
                         ['GET', dashboardMetaKey('totalTarget')],
                         ['GET', dashboardMetaKey('lineCount')],
-                        ['GET', dashboardMetaKey('resetAt')]
+                        ['GET', dashboardMetaKey('resetAt')],
+                        ['GET', dashboardMetaKey('dayDate')],
+                        ['GET', dashboardMetaKey('dayStatus')],
+                        ['GET', dashboardMetaKey('dayClosedAt')],
+                        ['GET', dashboardMetaKey('dayAutoClose')],
                     ], true);
                     const totalTarget = parseInt(results[0], 10) || 0;
                     const lineCount = parseInt(results[1], 10) || 0;
                     await applyDashboardRemoteReset(results[2]);
+                    applyProductionMetaFromRedis(results[3], results[4], results[5], results[6]);
 
                     const remote = await this.fetchLineCountFromRedis();
                     adoptCountFromUpstash(remote);
@@ -1232,7 +1414,7 @@
                 if (state.dashboardTargetPollId) clearInterval(state.dashboardTargetPollId);
                 if (!this.canQueryRedis()) return;
                 this.refreshLineTargetCap();
-                state.dashboardTargetPollId = setInterval(() => this.refreshLineTargetCap(), 12000);
+                state.dashboardTargetPollId = setInterval(() => this.refreshLineTargetCap(), 5000);
             },
 
             async pushCountReset() {
@@ -2320,8 +2502,20 @@
 
             const now = Date.now();
             if (validDirectionPass && (now - state.lastBoxTriggerTime > state.boxCooldownMs)) {
-                obj.countTriggered = true;
                 state.lastBoxTriggerTime = now;
+                if (!countingAllowed()) {
+                    notifyProductionLineClosed();
+                    return;
+                }
+                if (!canIncrementCount()) {
+                    showDetectionOverlay(
+                        state.lineTargetCap > 0
+                            ? `LINE TARGET ${state.lineTargetCap} REACHED`
+                            : 'CANNOT INCREMENT'
+                    );
+                    return;
+                }
+                obj.countTriggered = true;
                 triggerBoxCountEvent();
             }
         }
@@ -2526,6 +2720,8 @@
             if (counted) {
                 AudioEngine.playBeep('qr');
                 showDetectionOverlay(`SCANNED: ${codeFound.length > 28 ? codeFound.slice(0, 28) + '…' : codeFound}`);
+            } else if (!countingAllowed()) {
+                notifyProductionLineClosed('Barcode scanned — production line is closed.');
             } else {
                 showDetectionOverlay(`SCANNED (not counted): ${codeFound.length > 22 ? codeFound.slice(0, 22) + '…' : codeFound}`);
             }
@@ -2768,6 +2964,10 @@
         }
 
         function triggerBoxCountEvent() {
+            if (!countingAllowed()) {
+                notifyProductionLineClosed();
+                return;
+            }
             if (!canIncrementCount()) return;
             if (incrementCount({
                 type: 'Box Motion Count',
@@ -2780,11 +2980,15 @@
 
         function incrementCount(metadata = {}) {
             if (!canIncrementCount()) {
-                showDetectionOverlay(
-                    state.lineTargetCap > 0
-                        ? `LINE TARGET ${state.lineTargetCap} REACHED`
-                        : 'CANNOT INCREMENT'
-                );
+                if (!countingAllowed()) {
+                    notifyProductionLineClosed();
+                } else {
+                    showDetectionOverlay(
+                        state.lineTargetCap > 0
+                            ? `LINE TARGET ${state.lineTargetCap} REACHED`
+                            : 'CANNOT INCREMENT'
+                    );
+                }
                 return false;
             }
 
@@ -2828,6 +3032,10 @@
         }
 
         function setCountDirect(newCount, { skipConfirmOverCap = false } = {}) {
+            if (!countingAllowed()) {
+                showDetectionOverlay('PRODUCTION CLOSED');
+                return false;
+            }
             const n = parseDirectCountInput(newCount);
             if (!Number.isFinite(n)) {
                 showDetectionOverlay('ENTER A VALID COUNT (0 OR MORE)');
@@ -2898,6 +3106,10 @@
         }
 
         function decrementCount(metadata = {}) {
+            if (!countingAllowed()) {
+                showDetectionOverlay('PRODUCTION CLOSED');
+                return;
+            }
             if (state.count <= 0) {
                 showDetectionOverlay('COUNT ALREADY AT ZERO');
                 return;
@@ -2952,9 +3164,54 @@
                 }
             }
             if (elements.lineTargetStatus) {
-                const reached = isLineTargetReached();
+                const reached = isLineTargetReached() && countingAllowed();
                 elements.lineTargetStatus.classList.toggle('hidden', !reached);
             }
+
+            const closed = productionShowsClosed();
+            if (elements.productionClosedStatus) {
+                elements.productionClosedStatus.classList.toggle('hidden', !closed);
+            }
+            if (elements.productionClosedBanner) {
+                elements.productionClosedBanner.classList.toggle('hidden', !closed);
+            }
+            if (closed && elements.productionClosedBannerDetail && state.dayClosedAt) {
+                elements.productionClosedBannerDetail.textContent =
+                    `Closed at ${new Date(state.dayClosedAt).toLocaleString()} — open the day on the dashboard to count.`;
+            } else if (closed && elements.productionClosedBannerDetail) {
+                elements.productionClosedBannerDetail.textContent =
+                    'Not counting boxes. Open the production day on the dashboard to resume.';
+            }
+            if (elements.statusText && enforcesProductionDayFromUpstash()) {
+                if (closed) {
+                    elements.statusText.textContent = 'Production CLOSED';
+                    elements.statusDot?.classList.remove('bg-emerald-500', 'bg-amber-500');
+                    elements.statusDot?.classList.add('bg-rose-500');
+                    elements.statusPing?.classList.add('hidden');
+                } else if (state.isCameraActive) {
+                    elements.statusDot?.classList.remove('bg-rose-500');
+                    elements.statusPing?.classList.remove('hidden');
+                }
+            }
+            if (elements.productionDayBadge) {
+                if (enforcesProductionDayFromUpstash()) {
+                    elements.productionDayBadge.classList.remove('hidden');
+                    const label = closed ? 'CLOSED' : 'OPEN';
+                    elements.productionDayBadge.textContent = label;
+                    elements.productionDayBadge.className = closed
+                        ? 'text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-500/50 text-slate-300 bg-slate-800/80'
+                        : 'text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/10';
+                } else {
+                    elements.productionDayBadge.classList.add('hidden');
+                }
+            }
+            const recordingBlocked = enforcesProductionDayFromUpstash() && !countingAllowed();
+            [elements.manualAddBtn, elements.manualSubBtn, elements.setCountBtn].forEach(btn => {
+                if (!btn) return;
+                btn.disabled = recordingBlocked;
+                btn.classList.toggle('opacity-40', recordingBlocked);
+                btn.classList.toggle('pointer-events-none', recordingBlocked);
+            });
 
             if (state.sessionStartTime && state.count > 0) {
                 const elapsedMins = (Date.now() - state.sessionStartTime) / 60000;
@@ -3412,6 +3669,11 @@
             await UpstashSync.syncFromDashboard();
             UpstashSync.applyConfigToForm();
             loadLocalStorage();
+            if (UpstashSync.canQueryRedis()) {
+                await UpstashSync.refreshLineTargetCap();
+            } else {
+                updateCounterUI();
+            }
             await UpstashSync.pullCountFromRedis({ initial: true });
             UpstashSync.startDashboardTargetPolling();
             setupEventListeners();

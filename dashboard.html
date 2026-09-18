@@ -111,6 +111,7 @@
                 <button id="passkeyLockBtn" type="button" title="Lock dashboard" class="hidden p-2 text-slate-400 hover:text-amber-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition">
                     <i data-lucide="lock" class="w-5 h-5"></i>
                 </button>
+                <span id="productionDayBadge" class="text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-600 text-slate-500 bg-slate-900/60">Day —</span>
                 <span id="sheetSyncBadge" class="hidden text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-600 text-slate-500 bg-slate-900/60">Sheet off</span>
                 <span id="connectionBadge" class="text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-600 text-slate-500 bg-slate-900/60">Not connected</span>
                 <button type="button" id="resetCountersBtn" class="hidden sm:flex items-center gap-1.5 py-1.5 px-2.5 text-[11px] font-semibold text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/60 rounded-lg transition" title="Clear all line counts in Upstash">
@@ -129,7 +130,10 @@
         <section class="dash-card p-5 sm:p-6 dash-total-block">
             <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-4">
                 <div>
-                    <p class="text-xs dash-muted uppercase tracking-wider font-semibold mb-1">Total progress</p>
+                    <p class="text-xs dash-muted uppercase tracking-wider font-semibold mb-1 flex flex-wrap items-center gap-2">
+                        <span>Total progress</span>
+                        <span id="productionDaySummary" class="font-mono normal-case tracking-normal text-[10px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-400">—</span>
+                    </p>
                     <p class="tabular-nums tracking-tight flex flex-wrap items-baseline">
                         <span id="totalCount" class="count-total">0</span>
                         <span class="count-sep">/</span>
@@ -204,12 +208,34 @@
                 <i data-lucide="chevron-right" class="w-4 h-4 opacity-70"></i>
             </a>
             <p class="text-[11px] dash-muted leading-relaxed">
-                <strong class="text-slate-400">Total target</strong> and <strong class="text-slate-400">lines to monitor</strong> are stored in Upstash (daily ops) — any browser with connection setup sees the same values after refresh. <strong class="text-slate-400">Save &amp; refresh</strong> publishes changes.
+                Daily target, line count, and <strong class="text-slate-400">open/closed</strong> status live in Upstash — counters stop recording when the day is <strong class="text-slate-400">CLOSED</strong>.
             </p>
+
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="font-medium text-slate-200 flex items-center gap-1.5">
+                        <i data-lucide="calendar-clock" class="w-4 h-4 text-amber-400"></i> Today&apos;s production
+                    </span>
+                    <span id="productionDaySettingsBadge" class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-slate-600 text-slate-400">—</span>
+                </div>
+                <p class="text-[11px] text-slate-500 leading-relaxed">
+                    Calendar day: <strong id="productionDayDateLabel" class="text-slate-400 font-mono">—</strong>
+                    <span id="productionDayClosedHint" class="hidden block mt-1 text-slate-500"></span>
+                </p>
+                <label class="flex items-start gap-2 cursor-pointer text-[11px] text-slate-400">
+                    <input type="checkbox" id="dayAutoCloseToggle" class="mt-0.5 rounded border-slate-600" checked>
+                    <span>Auto-close at <strong class="text-slate-300">11:59:59 PM</strong> local time on the production date (any open dashboard will publish closed).</span>
+                </label>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" id="openProductionDayBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-emerald-600/25 hover:bg-emerald-600/35 text-emerald-300 border border-emerald-500/40 rounded-lg font-semibold text-[11px] transition">Open day</button>
+                    <button type="button" id="closeProductionDayBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-slate-800 hover:bg-rose-900/35 text-slate-300 hover:text-rose-300 border border-slate-600 hover:border-rose-700/50 rounded-lg font-semibold text-[11px] transition">Close day now</button>
+                </div>
+                <p class="text-[10px] text-slate-500 leading-relaxed">Open day sets today&apos;s date and status <strong class="text-slate-400">OPEN</strong>. Set target &amp; lines below, then <strong class="text-slate-400">Save &amp; refresh</strong>. Close stops all counters from recording.</p>
+            </div>
 
             <div class="grid grid-cols-2 gap-3">
                 <div class="space-y-2">
-                    <label for="totalTarget" class="block text-slate-400 font-medium">Total target boxes</label>
+                    <label for="totalTarget" class="block text-slate-400 font-medium">Today&apos;s target (boxes)</label>
                     <input type="number" id="totalTarget" min="0" step="1" value="0" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
                 </div>
                 <div class="space-y-2">
@@ -313,11 +339,23 @@
                 sharedSecret: ''
             },
             lastSheetPostFingerprint: '',
-            sheetPosting: false
+            sheetPosting: false,
+            dayDate: '',
+            dayStatus: 'closed',
+            dayClosedAt: '',
+            dayAutoClose: true
         };
 
         const el = {
             sheetSyncBadge: document.getElementById('sheetSyncBadge'),
+            productionDayBadge: document.getElementById('productionDayBadge'),
+            productionDaySummary: document.getElementById('productionDaySummary'),
+            productionDaySettingsBadge: document.getElementById('productionDaySettingsBadge'),
+            productionDayDateLabel: document.getElementById('productionDayDateLabel'),
+            productionDayClosedHint: document.getElementById('productionDayClosedHint'),
+            dayAutoCloseToggle: document.getElementById('dayAutoCloseToggle'),
+            openProductionDayBtn: document.getElementById('openProductionDayBtn'),
+            closeProductionDayBtn: document.getElementById('closeProductionDayBtn'),
             connectionBadge: document.getElementById('connectionBadge'),
             totalCount: document.getElementById('totalCount'),
             totalTargetDisplay: document.getElementById('totalTargetDisplay'),
@@ -835,8 +873,16 @@
                 const results = await redisRequest([
                     ['GET', dashboardMetaKey(base, 'totalTarget')],
                     ['GET', dashboardMetaKey(base, 'lineCount')],
+                    ['GET', dashboardMetaKey(base, 'dayDate')],
+                    ['GET', dashboardMetaKey(base, 'dayStatus')],
+                    ['GET', dashboardMetaKey(base, 'dayClosedAt')],
+                    ['GET', dashboardMetaKey(base, 'dayAutoClose')],
                 ], true);
-                return applyBoardMetaFromRedis(results[0], results[1]);
+                applyBoardMetaFromRedis(results[0], results[1]);
+                applyProductionMetaFromRedis(results[2], results[3], results[4], results[5]);
+                await maybeAutoCloseProductionDay();
+                updateProductionDayUI();
+                return true;
             } catch (e) {
                 console.warn('Dashboard board sync from Redis failed', e);
                 return false;
@@ -885,12 +931,120 @@
             return `${b}_dashboard:${suffix}`;
         }
 
+        function localCalendarDate(d = new Date()) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function endOfLocalDayMs(dateStr) {
+            if (!dateStr) return NaN;
+            const parts = dateStr.split('-').map(Number);
+            if (parts.length !== 3) return NaN;
+            return new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999).getTime();
+        }
+
+        function productionIsOpenForToday() {
+            if (state.dayStatus !== 'open') return false;
+            if (!state.dayDate || state.dayDate !== localCalendarDate()) return false;
+            if (state.dayAutoClose && Date.now() > endOfLocalDayMs(state.dayDate)) return false;
+            return true;
+        }
+
+        function productionShowsClosed() {
+            return !productionIsOpenForToday();
+        }
+
+        function applyProductionMetaFromRedis(dayDate, dayStatus, dayClosedAt, dayAutoCloseRaw) {
+            let changed = false;
+            if (dayDate != null && dayDate !== '') {
+                const d = String(dayDate).trim();
+                if (d !== state.dayDate) { state.dayDate = d; changed = true; }
+            }
+            if (dayStatus != null && dayStatus !== '') {
+                const s = String(dayStatus).trim().toLowerCase();
+                if (s === 'open' || s === 'closed') {
+                    if (state.dayStatus !== s) { state.dayStatus = s; changed = true; }
+                }
+            }
+            if (dayClosedAt != null) {
+                const c = String(dayClosedAt || '').trim();
+                if (c !== state.dayClosedAt) { state.dayClosedAt = c; changed = true; }
+            }
+            if (dayAutoCloseRaw != null && dayAutoCloseRaw !== '') {
+                const auto = dayAutoCloseRaw === '1' || dayAutoCloseRaw === 'true';
+                if (state.dayAutoClose !== auto) { state.dayAutoClose = auto; changed = true; }
+            }
+            if (changed) applyConfigToForm();
+            return changed;
+        }
+
+        async function maybeAutoCloseProductionDay() {
+            if (!state.restUrl || !state.restToken) return;
+            if (state.dayStatus !== 'open' || !state.dayAutoClose || !state.dayDate) return;
+            const now = Date.now();
+            const endMs = endOfLocalDayMs(state.dayDate);
+            if (!Number.isFinite(endMs) || now <= endMs) return;
+            state.dayStatus = 'closed';
+            state.dayClosedAt = new Date().toISOString();
+            try {
+                await pushDashboardMetaToRedis();
+            } catch (e) {
+                console.warn('Auto-close publish failed', e);
+            }
+        }
+
+        function updateProductionDayUI() {
+            const closed = productionShowsClosed();
+            const label = closed ? 'CLOSED' : 'OPEN';
+            const openStyles = 'text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/10';
+            const closedStyles = 'text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-500/50 text-slate-300 bg-slate-800/80';
+
+            if (el.productionDayBadge) {
+                el.productionDayBadge.className = closed ? closedStyles : openStyles;
+                el.productionDayBadge.textContent = label;
+            }
+            if (el.productionDaySettingsBadge) {
+                el.productionDaySettingsBadge.className = closed
+                    ? 'text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-slate-500 text-slate-400'
+                    : 'text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-emerald-500/40 text-emerald-300';
+                el.productionDaySettingsBadge.textContent = label;
+            }
+            if (el.productionDaySummary) {
+                const day = state.dayDate || localCalendarDate();
+                el.productionDaySummary.textContent = `${day} · ${label}`;
+                el.productionDaySummary.className = closed
+                    ? 'font-mono normal-case tracking-normal text-[10px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-400'
+                    : 'font-mono normal-case tracking-normal text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/30 text-emerald-300/90';
+            }
+            if (el.productionDayDateLabel) {
+                el.productionDayDateLabel.textContent = state.dayDate || '— (open day to set)';
+            }
+            if (el.productionDayClosedHint) {
+                if (closed && state.dayClosedAt) {
+                    el.productionDayClosedHint.classList.remove('hidden');
+                    el.productionDayClosedHint.textContent = `Closed at ${new Date(state.dayClosedAt).toLocaleString()}`;
+                } else if (closed && state.dayDate && state.dayDate !== localCalendarDate()) {
+                    el.productionDayClosedHint.classList.remove('hidden');
+                    el.productionDayClosedHint.textContent = 'Production date is not today — open a new day to count.';
+                } else {
+                    el.productionDayClosedHint.classList.add('hidden');
+                    el.productionDayClosedHint.textContent = '';
+                }
+            }
+        }
+
         async function pushDashboardMetaToRedis() {
             const base = state.keyPrefixBase;
             if (!state.restUrl || !state.restToken) return;
             const pipeline = [
                 ['SET', dashboardMetaKey(base, 'totalTarget'), String(state.totalTarget)],
                 ['SET', dashboardMetaKey(base, 'lineCount'), String(state.lineCount)],
+                ['SET', dashboardMetaKey(base, 'dayDate'), state.dayDate || ''],
+                ['SET', dashboardMetaKey(base, 'dayStatus'), state.dayStatus || 'closed'],
+                ['SET', dashboardMetaKey(base, 'dayClosedAt'), state.dayClosedAt || ''],
+                ['SET', dashboardMetaKey(base, 'dayAutoClose'), state.dayAutoClose ? '1' : '0'],
                 ['SET', dashboardMetaKey(base, 'updatedAt'), new Date().toISOString()]
             ];
             const configAt = new Date().toISOString();
@@ -1165,7 +1319,12 @@
             state.totalTarget = Math.max(0, Math.floor(Number(el.totalTarget.value) || 0));
             state.lineCount = Math.max(2, Math.min(24, Math.floor(Number(el.lineCount.value) || 2)));
             state.pollSeconds = Math.max(1, Math.min(60, Math.floor(Number(el.pollSeconds.value) || 3)));
+            readProductionDayFromForm();
             saveBoardCache();
+        }
+
+        function readProductionDayFromForm() {
+            state.dayAutoClose = el.dayAutoCloseToggle?.checked !== false;
         }
 
         function applyConfigToForm() {
@@ -1175,8 +1334,46 @@
             el.lineCountLabel.textContent = state.lineCount;
             el.pollIntervalLabel.textContent = state.pollSeconds;
             el.totalTargetDisplay.textContent = state.totalTarget;
+            if (el.dayAutoCloseToggle) el.dayAutoCloseToggle.checked = state.dayAutoClose !== false;
             updateTargetSplitPreview();
             updateSheetSyncBadge('idle');
+            updateProductionDayUI();
+        }
+
+        async function openProductionDay() {
+            saveConfig();
+            readProductionDayFromForm();
+            state.dayDate = localCalendarDate();
+            state.dayStatus = 'open';
+            state.dayClosedAt = '';
+            applyConfigToForm();
+            el.settingsMessage.textContent = 'Opening day…';
+            try {
+                await pushDashboardMetaToRedis();
+                el.settingsMessage.textContent = `Day OPEN for ${state.dayDate}. Set target and Save & refresh.`;
+                el.settingsMessage.className = 'text-[11px] text-emerald-400 min-h-[1rem]';
+            } catch (e) {
+                el.settingsMessage.textContent = e.message || 'Failed to publish open day';
+                el.settingsMessage.className = 'text-[11px] text-rose-400 min-h-[1rem]';
+            }
+        }
+
+        async function closeProductionDayNow() {
+            saveConfig();
+            readProductionDayFromForm();
+            if (!state.dayDate) state.dayDate = localCalendarDate();
+            state.dayStatus = 'closed';
+            state.dayClosedAt = new Date().toISOString();
+            applyConfigToForm();
+            el.settingsMessage.textContent = 'Closing day…';
+            try {
+                await pushDashboardMetaToRedis();
+                el.settingsMessage.textContent = 'Production CLOSED — counters stop recording.';
+                el.settingsMessage.className = 'text-[11px] text-amber-300 min-h-[1rem]';
+            } catch (e) {
+                el.settingsMessage.textContent = e.message || 'Failed to publish close';
+                el.settingsMessage.className = 'text-[11px] text-rose-400 min-h-[1rem]';
+            }
         }
 
         function normalizeSheetWebAppUrl(raw) {
@@ -1400,6 +1597,7 @@
         }
 
         function renderDashboard() {
+            updateProductionDayUI();
             const targets = distributeTarget(state.totalTarget, state.lineCount);
             let sum = 0;
             state.lines.forEach(line => { sum += line.count; });
@@ -1481,8 +1679,15 @@
                 const metaResults = await redisRequest([
                     ['GET', dashboardMetaKey(base, 'totalTarget')],
                     ['GET', dashboardMetaKey(base, 'lineCount')],
+                    ['GET', dashboardMetaKey(base, 'dayDate')],
+                    ['GET', dashboardMetaKey(base, 'dayStatus')],
+                    ['GET', dashboardMetaKey(base, 'dayClosedAt')],
+                    ['GET', dashboardMetaKey(base, 'dayAutoClose')],
                 ], true);
                 applyBoardMetaFromRedis(metaResults[0], metaResults[1]);
+                applyProductionMetaFromRedis(metaResults[2], metaResults[3], metaResults[4], metaResults[5]);
+                await maybeAutoCloseProductionDay();
+                updateProductionDayUI();
                 linesToFetch = state.lineCount;
 
                 const targets = distributeTarget(state.totalTarget, state.lineCount);
@@ -1556,6 +1761,12 @@
 
         ['totalTarget', 'lineCount'].forEach(id => {
             document.getElementById(id).addEventListener('input', updateTargetSplitPreview);
+        });
+
+        el.openProductionDayBtn?.addEventListener('click', () => openProductionDay());
+        el.closeProductionDayBtn?.addEventListener('click', () => {
+            if (!confirm('Close production for today? Counters will stop recording new boxes.')) return;
+            closeProductionDayNow();
         });
 
         el.saveSettingsBtn.addEventListener('click', async () => {

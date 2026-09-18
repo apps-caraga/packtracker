@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="dashboard-themes.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="passkey-gate.js"></script>
     <style>
         .landing-hero {
             background: radial-gradient(ellipse 80% 60% at 50% -10%, color-mix(in srgb, var(--dash-accent) 22%, transparent), transparent);
@@ -51,6 +52,47 @@
     </style>
 </head>
 <body class="dash-body min-h-full flex flex-col font-sans antialiased selection:theme">
+
+    <div id="passkeyGate" class="dash-gate fixed inset-0 z-[100] backdrop-blur flex items-center justify-center p-4">
+        <div class="dash-gate-panel max-w-md w-full rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
+            <div class="flex items-center gap-3">
+                <div class="dash-header-icon p-2.5 rounded-xl">
+                    <i data-lucide="key-round" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h2 id="passkeyGateTitle" class="font-bold text-lg text-slate-100">Unlock PackTracker</h2>
+                    <p id="passkeyGateSubtitle" class="text-xs text-slate-400 mt-0.5">Sign in with your device passkey</p>
+                </div>
+            </div>
+            <p id="passkeyGateHint" class="text-xs text-slate-400 leading-relaxed"></p>
+            <p id="passkeyGateError" class="hidden text-xs text-rose-300 bg-rose-950/40 border border-rose-800/60 rounded-lg px-3 py-2"></p>
+            <div class="flex flex-col gap-2">
+                <button type="button" id="passkeyPrimaryBtn" class="w-full py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2">
+                    <i data-lucide="fingerprint" class="w-4 h-4"></i>
+                    <span id="passkeyPrimaryBtnLabel">Sign in with passkey</span>
+                </button>
+                <button type="button" id="passkeySkipBtn" class="hidden w-full py-2 text-slate-400 hover:text-slate-200 text-xs font-medium transition">
+                    Continue without passkey
+                </button>
+            </div>
+            <div id="passkeyBackupRow" class="hidden pt-2 border-t border-slate-700/60 flex flex-wrap gap-2">
+                <button type="button" id="passkeyImportBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-slate-900/80 hover:bg-slate-700/50 border border-slate-600 text-slate-300 text-xs font-medium rounded-lg transition">
+                    Import config file
+                </button>
+                <button type="button" id="passkeyExportBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-slate-900/80 hover:bg-slate-700/50 border border-slate-600 text-slate-300 text-xs font-medium rounded-lg transition">
+                    Export config file
+                </button>
+            </div>
+            <input type="file" id="passkeyImportInput" accept="application/json,.json" class="hidden">
+        </div>
+    </div>
+
+    <div class="fixed top-3 right-3 z-40">
+        <button id="passkeyLockBtn" type="button" title="Lock PackTracker" class="hidden p-2 text-slate-400 hover:text-amber-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition bg-[color:var(--dash-surface)]/80 backdrop-blur">
+            <i data-lucide="lock" class="w-5 h-5"></i>
+        </button>
+    </div>
+
     <main class="landing-hero flex-1 flex flex-col items-center justify-center px-4 py-12 sm:py-16">
         <div class="landing-card max-w-lg w-full p-8 sm:p-10 text-center">
             <div class="dash-header-icon inline-flex p-3 rounded-2xl mb-5">
@@ -84,22 +126,42 @@
         Family Food Pack · counts stay in your browser &amp; Upstash
     </footer>
     <script>
-        window.addEventListener('load', () => {
-            if (window.PackTrackerTheme) PackTrackerTheme.initSelect?.();
-            if (window.lucide) lucide.createIcons();
-            if (window.PackTrackerConnection && !PackTrackerConnection.isConfigured()) {
-                const notice = document.getElementById('setupRequiredNotice');
-                const link = document.getElementById('primaryAppLink');
-                const label = document.getElementById('primaryAppLinkLabel');
-                notice?.classList.remove('hidden');
-                if (link) {
-                    link.href = 'setup.html?return=dashboard.html';
-                    link.querySelector('[data-lucide]')?.setAttribute('data-lucide', 'settings');
-                }
-                if (label) label.textContent = 'Connection setup';
+        const PasskeyGate = PackTrackerPasskey.mountGate({
+            pageLabel: 'PackTracker',
+            elements: {
+                gate: document.getElementById('passkeyGate'),
+                title: document.getElementById('passkeyGateTitle'),
+                subtitle: document.getElementById('passkeyGateSubtitle'),
+                hint: document.getElementById('passkeyGateHint'),
+                error: document.getElementById('passkeyGateError'),
+                primaryBtn: document.getElementById('passkeyPrimaryBtn'),
+                primaryLabel: document.getElementById('passkeyPrimaryBtnLabel'),
+                skipBtn: document.getElementById('passkeySkipBtn'),
+                backupRow: document.getElementById('passkeyBackupRow'),
+                importBtn: document.getElementById('passkeyImportBtn'),
+                exportBtn: document.getElementById('passkeyExportBtn'),
+                importInput: document.getElementById('passkeyImportInput'),
+                lockBtn: document.getElementById('passkeyLockBtn')
+            },
+            onUnlock: () => {
+                if (window.PackTrackerTheme) PackTrackerTheme.initSelect?.();
                 if (window.lucide) lucide.createIcons();
+                if (window.PackTrackerConnection && !PackTrackerConnection.isConfigured()) {
+                    const notice = document.getElementById('setupRequiredNotice');
+                    const link = document.getElementById('primaryAppLink');
+                    const label = document.getElementById('primaryAppLinkLabel');
+                    notice?.classList.remove('hidden');
+                    if (link) {
+                        link.href = 'setup.html?return=dashboard.html';
+                        link.querySelector('[data-lucide]')?.setAttribute('data-lucide', 'settings');
+                    }
+                    if (label) label.textContent = 'Connection setup';
+                    if (window.lucide) lucide.createIcons();
+                }
             }
         });
+
+        window.addEventListener('load', () => PasskeyGate.init());
     </script>
 </body>
 </html>

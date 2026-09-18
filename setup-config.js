@@ -99,6 +99,16 @@
         return !!(c.restUrl && c.restToken);
     }
 
+    function lineKeyPrefix(base, lineIndexOneBased) {
+        const b = (base || 'packtracker').replace(/:/g, '').trim() || 'packtracker';
+        return `${b}_line_${lineIndexOneBased}`;
+    }
+
+    function dashboardMetaKey(base, suffix) {
+        const b = (base || 'packtracker').replace(/:/g, '').trim() || 'packtracker';
+        return `${b}_dashboard:${suffix}`;
+    }
+
     function defaultBoardSettings() {
         return { totalTarget: 0, lineCount: 2, pollSeconds: 3 };
     }
@@ -109,7 +119,7 @@
         const src = raw.dashboard && typeof raw.dashboard === 'object' ? raw.dashboard : raw;
         return {
             totalTarget: Math.max(0, Math.floor(Number(src.totalTarget) || 0)),
-            lineCount: Math.max(2, Math.min(24, Math.floor(Number(src.lineCount) || 2))),
+            lineCount: Math.max(2, Math.min(10, Math.floor(Number(src.lineCount) || 2))),
             pollSeconds: Math.max(1, Math.min(60, Math.floor(Number(src.pollSeconds) || 3)))
         };
     }
@@ -121,7 +131,7 @@
             const c = JSON.parse(raw);
             return {
                 totalTarget: Math.max(0, Math.floor(Number(c.totalTarget) || 0)),
-                lineCount: Math.max(2, Math.min(24, Math.floor(Number(c.lineCount) || 2))),
+                lineCount: Math.max(2, Math.min(10, Math.floor(Number(c.lineCount) || 2))),
                 pollSeconds: Math.max(1, Math.min(60, Math.floor(Number(c.pollSeconds) || 3)))
             };
         } catch (e) {
@@ -228,6 +238,8 @@
         loadBoardSettings,
         saveBoardSettings,
         importFromCounterStorage,
-        migrateFromLegacyDashboard
+        migrateFromLegacyDashboard,
+        lineKeyPrefix,
+        dashboardMetaKey
     };
 })(typeof window !== 'undefined' ? window : globalThis);

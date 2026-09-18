@@ -15,6 +15,7 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js" crossorigin="anonymous"></script>
     <script src="setup-config.js"></script>
     <script src="line-stop-reasons.js"></script>
+    <script src="passkey-gate.js"></script>
     <style>
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         #settingsPanel.settings-open { transform: translateX(0); }
@@ -112,7 +113,6 @@
                 <button id="passkeyLockBtn" type="button" title="Lock dashboard" class="hidden p-2 text-slate-400 hover:text-amber-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition">
                     <i data-lucide="lock" class="w-5 h-5"></i>
                 </button>
-                <span id="productionDayBadge" class="status-pill is-closed">Day —</span>
                 <span id="sheetSyncBadge" class="hidden status-pill is-idle">Sheet off</span>
                 <span id="connectionBadge" class="status-pill is-idle">Not connected</span>
                 <button type="button" id="resetCountersBtn" class="hidden sm:flex items-center gap-1.5 py-1.5 px-2.5 text-[11px] font-semibold text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/60 rounded-lg transition" title="Clear all line counts in Upstash">
@@ -127,39 +127,52 @@
     </header>
 
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-5 space-y-6">
+        <p id="boardDateDisplay" class="dash-board-date" aria-live="polite">—</p>
+
         <!-- Overall summary -->
-        <section class="dash-card p-5 sm:p-6 dash-total-block">
-            <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-4">
-                <div>
-                    <p class="text-xs dash-muted uppercase tracking-wider font-semibold mb-1 flex flex-wrap items-center gap-2">
-                        <span>Total progress</span>
-                        <span id="productionDaySummary" class="font-mono normal-case tracking-normal text-[10px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-400">—</span>
-                    </p>
-                    <p class="tabular-nums tracking-tight flex flex-wrap items-baseline">
-                        <span id="totalCount" class="count-total">0</span>
-                        <span class="count-sep">/</span>
-                        <span id="totalTargetDisplay" class="count-target">0</span>
-                    </p>
-                    <p id="totalRemaining" class="text-sm dash-muted mt-1">Configure target in settings</p>
+        <section class="dash-card p-5 sm:p-6 dash-board-totals">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="dash-board-section-title">Totals</h2>
+                    <span id="productionDaySummary" class="status-pill is-summary is-closed font-mono normal-case tracking-normal">—</span>
                 </div>
-                <div class="text-right text-xs dash-muted">
+                <div class="text-right text-xs dash-muted shrink-0">
                     <p>Last refresh: <span id="lastRefresh" class="font-mono dash-text">—</span></p>
                     <p class="mt-0.5"><span id="lineCountLabel">0</span> lines · poll <span id="pollIntervalLabel">3</span>s</p>
                 </div>
             </div>
-            <div class="dash-progress-track relative">
-                <div id="totalProgressBar" class="dash-progress-fill relative overflow-hidden" style="width: 0%">
+            <div class="dash-metric-grid">
+                <div class="dash-metric-tile">
+                    <span class="dash-metric-label">Total target</span>
+                    <span id="totalTargetDisplay" class="dash-metric-value">0</span>
+                </div>
+                <div class="dash-metric-tile">
+                    <span class="dash-metric-label">Total produced</span>
+                    <span id="totalProducedDisplay" class="dash-metric-value is-produced">0</span>
+                </div>
+                <div class="dash-metric-tile">
+                    <span class="dash-metric-label">Good units</span>
+                    <span id="totalGoodDisplay" class="dash-metric-value is-good">0</span>
+                </div>
+                <div class="dash-metric-tile">
+                    <span class="dash-metric-label">Total rejected</span>
+                    <span id="totalRejectedDisplay" class="dash-metric-value is-reject">0</span>
+                </div>
+            </div>
+            <div class="dash-progress-track dash-board-progress relative mt-4">
+                <div id="totalProgressBar" class="dash-progress-fill dash-board-progress-fill relative overflow-hidden" style="width: 0%">
                     <div class="absolute inset-0 progress-shimmer pointer-events-none"></div>
                 </div>
             </div>
+            <div class="dash-progress-meta">
+                <span id="totalProgressPct">0.00% of target</span>
+                <span id="totalProgressFraction" class="tabular-nums">0 / 0</span>
+            </div>
+            <p id="totalYieldFooter" class="dash-board-footer">Yield 100.00% · Reject 0.00%</p>
         </section>
 
         <!-- Per-line cards -->
         <section>
-            <h2 class="text-sm font-semibold dash-muted uppercase tracking-wider mb-3 flex items-center gap-2">
-                <i data-lucide="git-branch" class="w-4 h-4" style="color: var(--dash-accent)"></i>
-                Production lines
-            </h2>
             <div id="lineGrid">
                 <p class="line-grid-placeholder dash-muted text-sm py-8 text-center border border-dashed rounded-xl" style="border-color: var(--dash-border)">Complete <a href="setup.html?return=dashboard.html" class="text-cyan-400 hover:underline">connection setup</a>, then set lines and target in settings.</p>
             </div>
@@ -171,10 +184,10 @@
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <h3 id="counterQrModalTitle" class="font-semibold text-slate-100 flex items-center gap-2">
-                        <i data-lucide="qr-code" class="w-5 h-5 text-cyan-400"></i>
-                        <span id="counterQrModalLineLabel">Line 1 counter</span>
+                        <i data-lucide="package-check" class="w-5 h-5 text-cyan-400"></i>
+                        <span id="counterQrModalLineLabel">Line 1 — Counter</span>
                     </h3>
-                    <p class="text-[11px] text-slate-500 mt-1">Scan to install counter on a tablet or phone.</p>
+                    <p class="text-[11px] text-slate-500 mt-1">Scan the QR or use the link to open the <strong class="text-slate-400">counter</strong> app on a line tablet.</p>
                 </div>
                 <button type="button" id="counterQrModalClose" class="p-2 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition" aria-label="Close">
                     <i data-lucide="x" class="w-5 h-5"></i>
@@ -183,8 +196,11 @@
             <div class="flex justify-center">
                 <canvas id="counterQrModalCanvas" class="rounded-xl bg-white p-3 max-w-full" width="320" height="320"></canvas>
             </div>
-            <p class="text-[10px] text-slate-500 text-center leading-relaxed">Opens <code class="text-slate-400">counter.html</code> with line number and Upstash sync. Treat like a password.</p>
-            <button type="button" id="counterQrModalCopyBtn" class="w-full py-2.5 px-3 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition">Copy setup link</button>
+            <p class="text-[10px] text-slate-500 text-center leading-relaxed">Link includes your REST token — trusted devices only.</p>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button type="button" id="counterQrModalCopyBtn" class="flex-1 py-2.5 px-3 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition">Copy setup link</button>
+                <a id="counterQrModalOpenBtn" href="#" target="_blank" rel="noopener noreferrer" class="flex-1 py-2.5 px-3 text-center text-sm font-semibold rounded-xl transition line-action-btn line-action-btn--open !min-h-0">Open counter</a>
+            </div>
         </div>
     </div>
 
@@ -271,7 +287,7 @@
                 </div>
                 <div class="space-y-2">
                     <label for="lineCount" class="block text-slate-400 font-medium">Lines to monitor</label>
-                    <input type="number" id="lineCount" min="2" max="24" step="1" value="2" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
+                    <input type="number" id="lineCount" min="2" max="10" step="1" value="2" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-2 font-mono focus:ring-1 focus:ring-cyan-500 focus:outline-none">
                 </div>
             </div>
 
@@ -309,7 +325,7 @@
                         Copy link
                     </button>
                     <button type="button" id="counterQrShowModalBtn" class="flex-1 min-w-[8rem] py-2 px-3 bg-slate-900/80 hover:bg-slate-700/50 border border-slate-600 text-slate-300 rounded-lg font-semibold transition disabled:opacity-40 disabled:pointer-events-none">
-                        Show full screen
+                        Counter QR…
                     </button>
                 </div>
                 <p id="counterQrHint" class="text-[10px] text-slate-500 min-h-[1rem] font-mono break-all leading-relaxed"></p>
@@ -341,7 +357,7 @@
             </div>
 
             <div class="pt-3 border-t border-slate-700/60 space-y-2">
-                <p class="text-[11px] text-slate-500">Clears <code class="text-slate-400">:count</code>, <code class="text-slate-400">:events</code>, and <code class="text-slate-400">:updatedAt</code> for every monitored line in Upstash. Counters pick up the reset within ~12s.</p>
+                <p class="text-[11px] text-slate-500">Clears <code class="text-slate-400">:count</code>, <code class="text-slate-400">:rejectCount</code>, <code class="text-slate-400">:events</code>, and <code class="text-slate-400">:updatedAt</code> for every monitored line in Upstash. Counters and checkers pick up the reset within ~12s.</p>
                 <button type="button" id="resetCountersSettingsBtn" class="w-full py-2 px-3 bg-rose-950/50 hover:bg-rose-900/40 text-rose-300 border border-rose-800/60 font-semibold rounded-lg transition flex items-center justify-center gap-2">
                     <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                     Reset all line counters
@@ -381,8 +397,8 @@
 
         const el = {
             sheetSyncBadge: document.getElementById('sheetSyncBadge'),
-            productionDayBadge: document.getElementById('productionDayBadge'),
             productionDaySummary: document.getElementById('productionDaySummary'),
+            boardDateDisplay: document.getElementById('boardDateDisplay'),
             productionDaySettingsBadge: document.getElementById('productionDaySettingsBadge'),
             productionDayDateLabel: document.getElementById('productionDayDateLabel'),
             productionDayClosedHint: document.getElementById('productionDayClosedHint'),
@@ -390,9 +406,13 @@
             openProductionDayBtn: document.getElementById('openProductionDayBtn'),
             closeProductionDayBtn: document.getElementById('closeProductionDayBtn'),
             connectionBadge: document.getElementById('connectionBadge'),
-            totalCount: document.getElementById('totalCount'),
             totalTargetDisplay: document.getElementById('totalTargetDisplay'),
-            totalRemaining: document.getElementById('totalRemaining'),
+            totalProducedDisplay: document.getElementById('totalProducedDisplay'),
+            totalGoodDisplay: document.getElementById('totalGoodDisplay'),
+            totalRejectedDisplay: document.getElementById('totalRejectedDisplay'),
+            totalProgressPct: document.getElementById('totalProgressPct'),
+            totalProgressFraction: document.getElementById('totalProgressFraction'),
+            totalYieldFooter: document.getElementById('totalYieldFooter'),
             totalProgressBar: document.getElementById('totalProgressBar'),
             lastRefresh: document.getElementById('lastRefresh'),
             lineCountLabel: document.getElementById('lineCountLabel'),
@@ -419,6 +439,7 @@
             counterQrModalLineLabel: document.getElementById('counterQrModalLineLabel'),
             counterQrModalClose: document.getElementById('counterQrModalClose'),
             counterQrModalCopyBtn: document.getElementById('counterQrModalCopyBtn'),
+            counterQrModalOpenBtn: document.getElementById('counterQrModalOpenBtn'),
             lineStopModal: document.getElementById('lineStopModal'),
             lineStopModalLineLabel: document.getElementById('lineStopModalLineLabel'),
             lineStopModalClose: document.getElementById('lineStopModalClose'),
@@ -452,282 +473,36 @@
             passkeySettingsImportInput: document.getElementById('passkeySettingsImportInput')
         };
 
-        const PASSKEY_STORAGE_KEY = 'packtracker_passkey';
-        const PASSKEY_SESSION_KEY = 'packtracker_passkey_session';
-        const PASSKEY_DECLINE_KEY = 'packtracker_passkey_declined';
-
-        const PasskeyAuth = {
-            bufferToBase64url(buffer) {
-                const bytes = new Uint8Array(buffer);
-                let binary = '';
-                bytes.forEach(b => { binary += String.fromCharCode(b); });
-                return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-            },
-
-            base64urlToBuffer(base64url) {
-                const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-                const pad = base64.length % 4 ? '='.repeat(4 - (base64.length % 4)) : '';
-                const binary = atob(base64 + pad);
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                return bytes;
-            },
-
-            randomBytes(length = 32) {
-                const buf = new Uint8Array(length);
-                crypto.getRandomValues(buf);
-                return buf;
-            },
-
-            isSupported() {
-                return window.isSecureContext && typeof window.PublicKeyCredential !== 'undefined';
-            },
-
-            getRpId() {
-                return window.location.hostname || 'localhost';
-            },
-
-            loadConfig() {
-                try {
-                    const raw = localStorage.getItem(PASSKEY_STORAGE_KEY);
-                    if (!raw) return null;
-                    const parsed = JSON.parse(raw);
-                    if (!parsed?.credentialId || !parsed?.userId) return null;
-                    return parsed;
-                } catch (e) {
-                    return null;
-                }
-            },
-
-            saveConfig(config) {
-                localStorage.setItem(PASSKEY_STORAGE_KEY, JSON.stringify(config));
-            },
-
-            clearConfig() {
-                localStorage.removeItem(PASSKEY_STORAGE_KEY);
-            },
-
-            markSessionUnlocked() {
-                sessionStorage.setItem(PASSKEY_SESSION_KEY, String(Date.now()));
-            },
-
-            isSessionUnlocked() {
-                return sessionStorage.getItem(PASSKEY_SESSION_KEY) != null;
-            },
-
-            clearSession() {
-                sessionStorage.removeItem(PASSKEY_SESSION_KEY);
-            },
-
-            validateConfigObject(obj) {
-                if (!obj || typeof obj !== 'object') return null;
-                if (typeof obj.credentialId !== 'string' || typeof obj.userId !== 'string') return null;
-                return {
-                    credentialId: obj.credentialId,
-                    userId: obj.userId,
-                    createdAt: obj.createdAt || new Date().toISOString()
-                };
-            },
-
-            async registerPasskey() {
-                if (!this.isSupported()) {
-                    throw new Error('Passkeys require HTTPS or localhost in a supported browser.');
-                }
-                const userId = this.randomBytes(32);
-                const challenge = this.randomBytes(32);
-                const rpId = this.getRpId();
-                const credential = await navigator.credentials.create({
-                    publicKey: {
-                        challenge,
-                        rp: { name: 'PackTracker', id: rpId },
-                        user: {
-                            id: userId,
-                            name: 'packtracker-operator',
-                            displayName: 'PackTracker Operator'
-                        },
-                        pubKeyCredParams: [
-                            { alg: -7, type: 'public-key' },
-                            { alg: -257, type: 'public-key' }
-                        ],
-                        authenticatorSelection: {
-                            residentKey: 'preferred',
-                            userVerification: 'required'
-                        },
-                        timeout: 120000,
-                        attestation: 'none'
-                    }
-                });
-                if (!credential?.rawId) {
-                    throw new Error('Passkey creation was cancelled or failed.');
-                }
-                const config = {
-                    credentialId: this.bufferToBase64url(credential.rawId),
-                    userId: this.bufferToBase64url(userId),
-                    createdAt: new Date().toISOString()
-                };
-                this.saveConfig(config);
-                this.markSessionUnlocked();
-                return config;
-            },
-
-            async authenticatePasskey() {
-                if (!this.isSupported()) {
-                    throw new Error('Passkeys require HTTPS or localhost in a supported browser.');
-                }
-                const stored = this.loadConfig();
-                if (!stored) throw new Error('No passkey is configured on this device.');
-                const challenge = this.randomBytes(32);
-                const assertion = await navigator.credentials.get({
-                    publicKey: {
-                        challenge,
-                        rpId: this.getRpId(),
-                        allowCredentials: [{
-                            id: this.base64urlToBuffer(stored.credentialId),
-                            type: 'public-key',
-                            transports: ['internal', 'hybrid', 'usb', 'nfc', 'ble']
-                        }],
-                        userVerification: 'required',
-                        timeout: 120000
-                    }
-                });
-                if (!assertion) throw new Error('Sign-in was cancelled or failed.');
-                this.markSessionUnlocked();
-                return true;
-            },
-
-            async exportConfigToFile() {
-                const config = this.loadConfig();
-                if (!config) throw new Error('No passkey config to export.');
-                const payload = JSON.stringify(config, null, 2);
-                const suggestedName = `packtracker-passkey-${new Date().toISOString().slice(0, 10)}.json`;
-                if (window.showSaveFilePicker) {
-                    try {
-                        const handle = await window.showSaveFilePicker({
-                            suggestedName,
-                            types: [{ description: 'PackTracker passkey config', accept: { 'application/json': ['.json'] } }]
-                        });
-                        const writable = await handle.createWritable();
-                        await writable.write(payload);
-                        await writable.close();
-                        return;
-                    } catch (e) {
-                        if (e.name === 'AbortError') return;
-                        throw e;
-                    }
-                }
-                const blob = new Blob([payload], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = suggestedName;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
-            },
-
-            async importConfigFromFile(file) {
-                const text = await file.text();
-                const config = this.validateConfigObject(JSON.parse(text));
-                if (!config) throw new Error('Invalid passkey config file.');
-                this.saveConfig(config);
-                return config;
-            },
-
-            async pickConfigFile() {
-                if (window.showOpenFilePicker) {
-                    try {
-                        const [handle] = await window.showOpenFilePicker({
-                            multiple: false,
-                            types: [{ description: 'PackTracker passkey config', accept: { 'application/json': ['.json'] } }]
-                        });
-                        return handle.getFile();
-                    } catch (e) {
-                        if (e.name === 'AbortError') return null;
-                        throw e;
-                    }
-                }
-                return null;
-            }
-        };
-
         let dashboardBooted = false;
         let dashboardBootPromise = null;
 
-        const PasskeyGate = {
-            showError(message) {
-                el.passkeyGateError.textContent = message;
-                el.passkeyGateError.classList.remove('hidden');
+        const PasskeyGate = PackTrackerPasskey.mountGate({
+            pageLabel: 'Dashboard',
+            elements: {
+                gate: el.passkeyGate,
+                title: el.passkeyGateTitle,
+                subtitle: el.passkeyGateSubtitle,
+                hint: el.passkeyGateHint,
+                error: el.passkeyGateError,
+                primaryBtn: el.passkeyPrimaryBtn,
+                primaryLabel: el.passkeyPrimaryBtnLabel,
+                skipBtn: el.passkeySkipBtn,
+                backupRow: el.passkeyBackupRow,
+                importBtn: el.passkeyImportBtn,
+                exportBtn: el.passkeyExportBtn,
+                importInput: el.passkeyImportInput,
+                lockBtn: el.passkeyLockBtn
             },
-
-            clearError() {
-                el.passkeyGateError.textContent = '';
-                el.passkeyGateError.classList.add('hidden');
+            settings: {
+                statusBadge: el.passkeyStatusBadge,
+                hint: el.passkeySettingsHint,
+                setupBtn: el.passkeySetupBtn,
+                removeBtn: el.passkeyRemoveBtn,
+                exportBtn: el.passkeySettingsExportBtn,
+                importBtn: el.passkeySettingsImportBtn,
+                importInput: el.passkeySettingsImportInput
             },
-
-            hide() {
-                el.passkeyGate.classList.add('hidden');
-                if (PasskeyAuth.loadConfig()) {
-                    el.passkeyLockBtn.classList.remove('hidden');
-                } else {
-                    el.passkeyLockBtn.classList.add('hidden');
-                }
-                this.updateSettingsUI();
-            },
-
-            show(mode = 'login') {
-                el.passkeyGate.classList.remove('hidden');
-                this.clearError();
-                if (window.lucide) lucide.createIcons({ root: el.passkeyGate });
-
-                const hasConfig = !!PasskeyAuth.loadConfig();
-                const supported = PasskeyAuth.isSupported();
-                el.passkeyPrimaryBtn.disabled = false;
-
-                if (mode === 'login' && hasConfig) {
-                    el.passkeyGateTitle.textContent = 'Unlock Dashboard';
-                    el.passkeyGateSubtitle.textContent = 'Sign in with your device passkey';
-                    el.passkeyPrimaryBtnLabel.textContent = 'Sign in with passkey';
-                    el.passkeyPrimaryBtn.disabled = !supported;
-                    el.passkeySkipBtn.classList.add('hidden');
-                    el.passkeyBackupRow.classList.remove('hidden');
-                } else if (mode === 'setup' || !hasConfig) {
-                    el.passkeyGateTitle.textContent = 'Set up passkey';
-                    el.passkeyGateSubtitle.textContent = 'Protect this dashboard on shared displays';
-                    el.passkeyPrimaryBtnLabel.textContent = supported ? 'Create passkey' : 'Passkey unavailable';
-                    el.passkeyPrimaryBtn.disabled = !supported;
-                    el.passkeySkipBtn.classList.remove('hidden');
-                    el.passkeyBackupRow.classList.remove('hidden');
-                }
-
-                if (!supported) {
-                    el.passkeyGateHint.textContent = 'Open over HTTPS or localhost to use passkeys. You can continue without one or import a config file from counter.';
-                } else {
-                    el.passkeyGateHint.textContent = 'Passkeys are verified on this device only. Same config as counter.html on this site—no account server.';
-                }
-            },
-
-            updateSettingsUI() {
-                const hasConfig = !!PasskeyAuth.loadConfig();
-                if (hasConfig) {
-                    el.passkeyStatusBadge.textContent = 'On';
-                    el.passkeyStatusBadge.className = 'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/10';
-                    el.passkeySetupBtn.classList.add('hidden');
-                    el.passkeyRemoveBtn.classList.remove('hidden');
-                    el.passkeySettingsExportBtn.classList.remove('hidden');
-                    el.passkeySettingsHint.textContent = 'Use the lock icon in the header to require sign-in again.';
-                } else {
-                    el.passkeyStatusBadge.textContent = 'Off';
-                    el.passkeyStatusBadge.className = 'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-slate-600 text-slate-400';
-                    el.passkeySetupBtn.classList.remove('hidden');
-                    el.passkeyRemoveBtn.classList.add('hidden');
-                    el.passkeySettingsExportBtn.classList.add('hidden');
-                    el.passkeySettingsHint.textContent = 'Same passkey config as the counter app on this domain.';
-                }
-            },
-
-            async unlockAndBoot() {
-                this.hide();
+            onUnlock: async () => {
                 if (!dashboardBooted) {
                     if (!dashboardBootPromise) dashboardBootPromise = bootDashboard();
                     await dashboardBootPromise;
@@ -736,154 +511,13 @@
                     restartPolling();
                 }
             },
-
-            lock() {
-                PasskeyAuth.clearSession();
+            onLock: () => {
                 if (state.pollTimer) {
                     clearInterval(state.pollTimer);
                     state.pollTimer = null;
                 }
-                if (PasskeyAuth.loadConfig()) {
-                    this.show('login');
-                } else {
-                    this.hide();
-                }
-            },
-
-            bindEvents() {
-                el.passkeyPrimaryBtn.addEventListener('click', async () => {
-                    this.clearError();
-                    try {
-                        if (PasskeyAuth.loadConfig()) {
-                            await PasskeyAuth.authenticatePasskey();
-                        } else {
-                            await PasskeyAuth.registerPasskey();
-                        }
-                        await this.unlockAndBoot();
-                    } catch (err) {
-                        this.showError(err.message || 'Passkey operation failed.');
-                    }
-                });
-
-                el.passkeySkipBtn.addEventListener('click', () => {
-                    this.clearError();
-                    localStorage.setItem(PASSKEY_DECLINE_KEY, '1');
-                    this.unlockAndBoot();
-                });
-
-                const runImport = async (file) => {
-                    if (!file) return;
-                    this.clearError();
-                    try {
-                        await PasskeyAuth.importConfigFromFile(file);
-                        await PasskeyAuth.authenticatePasskey();
-                        await this.unlockAndBoot();
-                    } catch (err) {
-                        this.showError(err.message || 'Import failed.');
-                    }
-                };
-
-                el.passkeyImportBtn.addEventListener('click', async () => {
-                    try {
-                        const file = await PasskeyAuth.pickConfigFile();
-                        await runImport(file);
-                    } catch (err) {
-                        if (err.message) this.showError(err.message);
-                        else el.passkeyImportInput.click();
-                    }
-                });
-
-                el.passkeyImportInput.addEventListener('change', async (e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = '';
-                    await runImport(file);
-                });
-
-                el.passkeyExportBtn.addEventListener('click', async () => {
-                    this.clearError();
-                    try {
-                        await PasskeyAuth.exportConfigToFile();
-                    } catch (err) {
-                        this.showError(err.message || 'Export failed.');
-                    }
-                });
-
-                el.passkeyLockBtn.addEventListener('click', () => this.lock());
-
-                el.passkeySetupBtn.addEventListener('click', async () => {
-                    try {
-                        await PasskeyAuth.registerPasskey();
-                        localStorage.removeItem(PASSKEY_DECLINE_KEY);
-                        this.updateSettingsUI();
-                        el.passkeyLockBtn.classList.remove('hidden');
-                        alert('Passkey enabled. Use the lock icon to require sign-in again.');
-                    } catch (err) {
-                        alert(err.message || 'Could not create passkey.');
-                    }
-                });
-
-                el.passkeyRemoveBtn.addEventListener('click', () => {
-                    if (!confirm('Remove passkey lock from this browser?')) return;
-                    PasskeyAuth.clearConfig();
-                    PasskeyAuth.clearSession();
-                    this.updateSettingsUI();
-                    el.passkeyLockBtn.classList.add('hidden');
-                });
-
-                el.passkeySettingsExportBtn.addEventListener('click', async () => {
-                    try {
-                        await PasskeyAuth.exportConfigToFile();
-                    } catch (err) {
-                        alert(err.message || 'Export failed.');
-                    }
-                });
-
-                el.passkeySettingsImportBtn.addEventListener('click', async () => {
-                    try {
-                        const file = await PasskeyAuth.pickConfigFile();
-                        if (file) {
-                            await PasskeyAuth.importConfigFromFile(file);
-                            this.updateSettingsUI();
-                            alert('Config imported. Lock the dashboard to sign in with your passkey.');
-                        }
-                    } catch (err) {
-                        if (err.name !== 'AbortError') el.passkeySettingsImportInput.click();
-                    }
-                });
-
-                el.passkeySettingsImportInput.addEventListener('change', async (e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = '';
-                    if (!file) return;
-                    try {
-                        await PasskeyAuth.importConfigFromFile(file);
-                        this.updateSettingsUI();
-                        alert('Config imported. Lock the dashboard to sign in with your passkey.');
-                    } catch (err) {
-                        alert(err.message || 'Import failed.');
-                    }
-                });
-            },
-
-            async init() {
-                this.bindEvents();
-                this.updateSettingsUI();
-
-                const hasConfig = !!PasskeyAuth.loadConfig();
-                const sessionOk = PasskeyAuth.isSessionUnlocked();
-                const declinedSetup = localStorage.getItem(PASSKEY_DECLINE_KEY) === '1';
-
-                if (hasConfig && !sessionOk) {
-                    this.show('login');
-                    return;
-                }
-                if (!hasConfig && !declinedSetup) {
-                    this.show('setup');
-                    return;
-                }
-                await this.unlockAndBoot();
             }
-        };
+        });
 
         function applyBoardMetaFromRedis(totalRaw, lineCountRaw) {
             let changed = false;
@@ -896,7 +530,7 @@
             }
             if (lineCountRaw != null && lineCountRaw !== '') {
                 const lc = parseInt(lineCountRaw, 10);
-                if (Number.isFinite(lc) && lc >= 2 && lc <= 24 && lc !== state.lineCount) {
+                if (Number.isFinite(lc) && lc >= 2 && lc <= 10 && lc !== state.lineCount) {
                     state.lineCount = lc;
                     changed = true;
                 }
@@ -1172,6 +806,18 @@
             return `${y}-${m}-${day}`;
         }
 
+        function formatLongCalendarDate(dateStr) {
+            let d;
+            if (dateStr) {
+                const parts = String(dateStr).trim().split('-').map(Number);
+                if (parts.length === 3 && parts.every(n => Number.isFinite(n))) {
+                    d = new Date(parts[0], parts[1] - 1, parts[2]);
+                }
+            }
+            if (!d || Number.isNaN(d.getTime())) d = new Date();
+            return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+        }
+
         function endOfLocalDayMs(dateStr) {
             if (!dateStr) return NaN;
             const parts = dateStr.split('-').map(Number);
@@ -1233,16 +879,15 @@
             const closed = productionShowsClosed();
             const label = closed ? 'CLOSED' : 'OPEN';
 
-            if (el.productionDayBadge) {
-                el.productionDayBadge.className = `status-pill ${closed ? 'is-closed' : 'is-open'}`;
-                el.productionDayBadge.textContent = label;
-            }
             if (el.productionDaySettingsBadge) {
                 el.productionDaySettingsBadge.className = `status-pill ${closed ? 'is-closed' : 'is-open'}`;
                 el.productionDaySettingsBadge.textContent = label;
             }
+            const day = state.dayDate || localCalendarDate();
+            if (el.boardDateDisplay) {
+                el.boardDateDisplay.textContent = formatLongCalendarDate(day);
+            }
             if (el.productionDaySummary) {
-                const day = state.dayDate || localCalendarDate();
                 el.productionDaySummary.textContent = `${day} · ${label}`;
                 el.productionDaySummary.className = `status-pill is-summary ${closed ? 'is-closed' : 'is-open'}`;
             }
@@ -1308,8 +953,22 @@
             return u;
         }
 
+        function buildCheckerUrl(lineNum, withBootstrap = true) {
+            const u = new URL('checker.html', window.location.href);
+            u.searchParams.set('line', String(lineNum));
+            if (withBootstrap && state.restUrl && state.restToken) {
+                u.searchParams.set('upstash_bootstrap', encodeUpstashBootstrapPayload());
+            }
+            return u;
+        }
+
         function counterUrlForLine(lineNum, withBootstrap = true) {
             const u = buildCounterUrl(lineNum, withBootstrap);
+            return u.pathname + u.search;
+        }
+
+        function checkerUrlForLine(lineNum, withBootstrap = true) {
+            const u = buildCheckerUrl(lineNum, withBootstrap);
             return u.pathname + u.search;
         }
 
@@ -1321,7 +980,7 @@
 
         function populateCounterQrLineSelect() {
             if (!el.counterQrLineSelect) return;
-            const lines = Math.max(1, Math.min(24, state.lineCount || 2));
+            const lines = Math.max(1, Math.min(10, state.lineCount || 2));
             const prev = el.counterQrLineSelect.value;
             el.counterQrLineSelect.innerHTML = Array.from({ length: lines }, (_, i) => {
                 const n = i + 1;
@@ -1391,8 +1050,11 @@
                 return;
             }
             counterQrModalLine = lineNum;
-            el.counterQrModalLineLabel.textContent = `Line ${lineNum} counter`;
+            el.counterQrModalLineLabel.textContent = `Line ${lineNum} — Counter`;
             const url = counterAbsoluteUrlForLine(lineNum);
+            if (el.counterQrModalOpenBtn) {
+                el.counterQrModalOpenBtn.href = url;
+            }
             try {
                 await renderCounterQrCanvas(el.counterQrModalCanvas, url);
             } catch (e) {
@@ -1426,7 +1088,7 @@
         function resetConfirmMessage() {
             const n = state.lineCount;
             const base = state.keyPrefixBase;
-            return `Reset ALL ${n} line counter(s) in Upstash?\n\nThis deletes Redis keys for each line:\n• ${lineKeyPrefix(base, 1)}:count, :events, :updatedAt\n• … through line ${n}\n\nTarget settings are kept. Counters will zero within ~12 seconds.\n\nThis cannot be undone.`;
+            return `Reset ALL ${n} line counter(s) in Upstash?\n\nThis deletes Redis keys for each line:\n• ${lineKeyPrefix(base, 1)}:count, :events, :updatedAt, :rejectCount, …\n• … through line ${n}\n\nTarget settings are kept. Counters and checker rejects zero within ~12 seconds.\n\nThis cannot be undone.`;
         }
 
         async function resetAllCountersInUpstash() {
@@ -1438,7 +1100,7 @@
             const pipeline = [];
             for (let i = 1; i <= lines; i++) {
                 const prefix = lineKeyPrefix(base, i);
-                pipeline.push(['DEL', `${prefix}:count`, `${prefix}:updatedAt`, `${prefix}:events`]);
+                pipeline.push(['DEL', `${prefix}:count`, `${prefix}:updatedAt`, `${prefix}:events`, `${prefix}:rejectCount`, `${prefix}:rejectUpdatedAt`, `${prefix}:rejectLastReason`, `${prefix}:rejectLastReasonId`]);
             }
             const resetAt = new Date().toISOString();
             pipeline.push(['SET', dashboardMetaKey(base, 'resetAt'), resetAt]);
@@ -1545,7 +1207,7 @@
 
         function saveConfig() {
             state.totalTarget = Math.max(0, Math.floor(Number(el.totalTarget.value) || 0));
-            state.lineCount = Math.max(2, Math.min(24, Math.floor(Number(el.lineCount.value) || 2)));
+            state.lineCount = Math.max(2, Math.min(10, Math.floor(Number(el.lineCount.value) || 2)));
             state.pollSeconds = Math.max(1, Math.min(60, Math.floor(Number(el.pollSeconds.value) || 3)));
             readProductionDayFromForm();
             saveBoardCache();
@@ -1630,6 +1292,8 @@
                 lines: state.lines.map(l => ({
                     line: l.number,
                     count: l.count,
+                    rejectCount: l.rejectCount || 0,
+                    goodCount: Math.max(0, l.count - (l.rejectCount || 0)),
                     target: l.target,
                     updatedAt: l.updatedAt
                 }))
@@ -1645,12 +1309,21 @@
         }
 
         function updateSheetSyncBadge(kind) {
-            if (!el.sheetSyncBadge) return;
+            const badge = el.sheetSyncBadge;
+            if (!badge) return;
             if (!state.sheet.enabled || !state.sheet.webAppUrl) {
-                el.sheetSyncBadge.classList.add('hidden');
+                badge.classList.add('hidden');
                 return;
             }
-            el.sheetSyncBadge.classList.remove('hidden');
+            badge.classList.remove('hidden');
+
+            const softPost = kind === 'busy' && badge.dataset.sheetSynced === '1';
+            if (softPost) {
+                badge.className = 'status-pill is-running is-syncing';
+                badge.textContent = 'Sheet synced';
+                return;
+            }
+
             const pill = {
                 off: 'status-pill is-idle',
                 ok: 'status-pill is-running',
@@ -1659,8 +1332,11 @@
                 idle: 'status-pill is-idle'
             };
             const labels = { off: 'Sheet off', ok: 'Sheet synced', error: 'Sheet error', busy: 'Sheet…', idle: 'Sheet on' };
-            el.sheetSyncBadge.className = pill[kind] || pill.idle;
-            el.sheetSyncBadge.textContent = labels[kind] || 'Sheet';
+            badge.className = pill[kind] || pill.idle;
+            badge.textContent = labels[kind] || 'Sheet';
+
+            if (kind === 'ok') badge.dataset.sheetSynced = '1';
+            else if (kind === 'error' || kind === 'off') delete badge.dataset.sheetSynced;
         }
 
         async function parseSheetWebAppResponse(res) {
@@ -1740,14 +1416,31 @@
         }
 
         function setConnectionBadge(kind, text) {
+            const badge = el.connectionBadge;
+            if (!badge) return;
+
+            const softPoll =
+                kind === 'busy' &&
+                text === 'Refreshing' &&
+                badge.dataset.connLive === '1';
+
+            if (softPoll) {
+                badge.className = 'status-pill is-live is-syncing';
+                badge.textContent = 'Live';
+                return;
+            }
+
             const pill = {
                 ok: 'status-pill is-live',
                 error: 'status-pill is-error',
                 idle: 'status-pill is-idle',
                 busy: 'status-pill is-stale'
             };
-            el.connectionBadge.className = pill[kind] || pill.idle;
-            el.connectionBadge.textContent = text;
+            badge.className = pill[kind] || pill.idle;
+            badge.textContent = text;
+
+            if (kind === 'ok') badge.dataset.connLive = '1';
+            else if (kind === 'idle' || kind === 'error') delete badge.dataset.connLive;
         }
 
         async function redisRequest(body, pipeline = false) {
@@ -1795,10 +1488,58 @@
             if (sec < 5) return 'Just now';
             if (sec < 60) return `${sec}s ago`;
             if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+            if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
             return new Date(t).toLocaleTimeString();
         }
 
-        /** Auto-fit cards; use at least 2 columns when 2+ lines are monitored */
+        function yieldRejectFooter(produced, rejected) {
+            const p = Math.max(0, Number(produced) || 0);
+            const r = Math.max(0, Number(rejected) || 0);
+            const total = p + r;
+            const yieldPct = total > 0 ? (p / total) * 100 : 100;
+            const rejectPct = total > 0 ? (r / total) * 100 : 0;
+            return `Yield ${yieldPct.toFixed(2)}% · Reject ${rejectPct.toFixed(2)}%`;
+        }
+
+        function productionHoursElapsed() {
+            const day = state.dayDate || localCalendarDate();
+            const parts = day.split('-').map(Number);
+            if (parts.length !== 3) return 0.05;
+            const start = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0).getTime();
+            return Math.max(0.05, (Date.now() - start) / 3600000);
+        }
+
+        function formatProductionRate(count) {
+            const rate = Math.max(0, Number(count) || 0) / productionHoursElapsed();
+            if (rate >= 100) return `${Math.round(rate)}/hr`;
+            if (rate >= 10) return `${rate.toFixed(1)}/hr`;
+            return `${rate.toFixed(1)}/hr`;
+        }
+
+        function lineBoardStatus(line) {
+            if (line.stopped) {
+                const reason = window.PackTrackerLineStop
+                    ? PackTrackerLineStop.displayReasonLabel(line.stopReason, line.stopRemarks)
+                    : (line.stopReason || 'Stopped');
+                const detail = (reason || 'Stopped').trim();
+                return {
+                    className: 'line-status-banner is-stopped is-stopped-detail',
+                    label: `Stopped — ${detail}`,
+                    title: detail
+                };
+            }
+            const target = line.target;
+            const done = target > 0 && line.count >= target;
+            if (done) {
+                return { className: 'line-status-banner is-complete', label: 'COMPLETE', title: 'Target reached' };
+            }
+            if (line.stale) {
+                return { className: 'line-status-banner is-stale', label: 'STALE', title: 'No recent counter updates' };
+            }
+            return { className: 'line-status-banner is-running', label: 'RUNNING', title: 'Actively counting' };
+        }
+
+        /** Two columns per row (single line stays centered). */
         function applyLineGridLayout() {
             const grid = el.lineGrid;
             const n = state.lines.length;
@@ -1812,16 +1553,7 @@
                 return;
             }
 
-            if (n === 2) {
-                grid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
-                return;
-            }
-
-            const maxCols = n;
-            const gapRem = 1;
-            const gapsTotal = (maxCols - 1) * gapRem;
-            grid.style.gridTemplateColumns =
-                `repeat(auto-fit, minmax(max(10.5rem, calc((100% - ${gapsTotal}rem) / ${maxCols})), 1fr))`;
+            grid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
         }
 
         function renderDashboard() {
@@ -1830,15 +1562,27 @@
             let sum = 0;
             state.lines.forEach(line => { sum += line.count; });
 
-            el.totalCount.textContent = sum;
+            const rejected = state.lines.reduce((s, l) => s + (l.rejectCount || 0), 0);
+            const good = Math.max(0, sum - rejected);
+
             el.totalTargetDisplay.textContent = state.totalTarget;
-            const remaining = Math.max(0, state.totalTarget - sum);
-            el.totalRemaining.textContent = state.totalTarget > 0
-                ? (remaining === 0 ? 'Target reached' : `${remaining} box${remaining === 1 ? '' : 'es'} remaining`)
-                : 'Set a total target in settings';
+            el.totalProducedDisplay.textContent = sum;
+            el.totalGoodDisplay.textContent = good;
+            el.totalRejectedDisplay.textContent = rejected;
 
             const pct = state.totalTarget > 0 ? Math.min(100, (sum / state.totalTarget) * 100) : 0;
             el.totalProgressBar.style.width = `${pct}%`;
+            if (el.totalProgressPct) {
+                el.totalProgressPct.textContent = state.totalTarget > 0
+                    ? `${pct.toFixed(2)}% of target`
+                    : 'No target set';
+            }
+            if (el.totalProgressFraction) {
+                el.totalProgressFraction.textContent = `${sum} / ${state.totalTarget}`;
+            }
+            if (el.totalYieldFooter) {
+                el.totalYieldFooter.textContent = yieldRejectFooter(good, rejected);
+            }
 
             if (!state.lines.length) {
                 el.lineGrid.innerHTML = '<p class="line-grid-placeholder dash-muted text-sm py-8 text-center border border-dashed rounded-xl" style="border-color: var(--dash-border)">Configure lines in settings.</p>';
@@ -1851,37 +1595,51 @@
                 const pctLine = target > 0 ? Math.min(100, (line.count / target) * 100) : (line.count > 0 ? 100 : 0);
                 const done = target > 0 && line.count >= target;
                 const accent = ((line.number - 1) % 8) + 1;
-                const pill = lineStopStatusPill(line);
-                const fillClass = done ? 'line-progress-fill is-complete' : 'line-progress-fill';
+                const boardStatus = lineBoardStatus(line);
+                const fillClass = done ? 'line-progress-fill dash-board-progress-fill is-complete' : 'line-progress-fill dash-board-progress-fill';
+                const lineRejected = line.rejectCount || 0;
+                const lineGood = Math.max(0, line.count - lineRejected);
 
                 return `
-                <article class="line-card line-accent-${accent} flex flex-col gap-3">
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="flex items-start gap-2 min-w-0">
-                            <span class="line-badge-num">L${line.number}</span>
-                            <div class="min-w-0">
-                                <h3 class="line-label">Line ${line.number}</h3>
-                                <p class="text-[10px] font-mono dash-muted mt-0.5 truncate" title="${line.redisKey}">${line.redisKey}</p>
-                            </div>
+                <article class="line-card line-card-board line-accent-${accent} flex flex-col gap-2">
+                    <div class="line-board-head">
+                        <span class="${boardStatus.className}" title="${escapeHtml(boardStatus.title)}">${escapeHtml(boardStatus.label)}</span>
+                        <span class="text-[10px] dash-muted tabular-nums shrink-0">${formatRelativeTime(line.updatedAt)}</span>
+                    </div>
+                    <h3 class="line-board-title">Line ${line.number}</h3>
+                    <div class="dash-metric-grid dash-metric-grid--line">
+                        <div class="dash-metric-tile">
+                            <span class="dash-metric-label">Target</span>
+                            <span class="dash-metric-value dash-metric-value--sm">${target}</span>
                         </div>
-                        <span class="${pill.className}" title="${escapeHtml(pill.title)}">${escapeHtml(pill.label)}</span>
+                        <div class="dash-metric-tile">
+                            <span class="dash-metric-label">Produced</span>
+                            <span class="dash-metric-value dash-metric-value--sm is-produced">${line.count}</span>
+                        </div>
+                        <div class="dash-metric-tile">
+                            <span class="dash-metric-label">Good units</span>
+                            <span class="dash-metric-value dash-metric-value--sm is-good">${lineGood}</span>
+                        </div>
+                        <div class="dash-metric-tile">
+                            <span class="dash-metric-label">Rejected</span>
+                            <span class="dash-metric-value dash-metric-value--sm is-reject">${lineRejected}</span>
+                        </div>
                     </div>
-                    <div class="line-count-row">
-                        <span class="line-count">${line.count}</span>
-                        <span class="line-count-sep">/</span>
-                        <span class="line-target">${target}</span>
-                    </div>
-                    <div class="dash-progress-track h-2">
+                    <div class="dash-progress-track dash-board-progress h-2">
                         <div class="${fillClass}" style="width: ${pctLine}%"></div>
                     </div>
-                    <div class="flex items-center justify-between gap-2 text-[10px] dash-muted">
-                        <span class="min-w-0 truncate">Updated ${formatRelativeTime(line.updatedAt)}</span>
+                    <div class="dash-progress-meta">
+                        <span>${target > 0 ? `${pctLine.toFixed(2)}% of target` : '—'}</span>
+                        <span class="tabular-nums">${line.count} / ${target}</span>
+                    </div>
+                    <p class="dash-board-footer">${formatProductionRate(line.count)} · ${yieldRejectFooter(lineGood, lineRejected)}</p>
+                    <div class="flex items-center justify-end gap-2 text-[10px] dash-muted pt-1 border-t" style="border-color: var(--dash-border)">
                         <span class="line-card-actions shrink-0">
                             ${line.stopped
                                 ? `<button type="button" class="line-action-btn line-action-btn--resume" data-line-resume="${line.number}">Resume</button>`
                                 : `<button type="button" class="line-action-btn line-action-btn--stop" data-line-stop="${line.number}">Stop</button>`}
-                            <button type="button" class="line-action-btn line-action-btn--qr" data-counter-qr-line="${line.number}" title="Show setup QR for this line">QR</button>
-                            <a href="${counterUrlForLine(line.number)}" class="line-action-btn line-action-btn--open" target="_blank" rel="noopener noreferrer">Open</a>
+                            <button type="button" class="line-action-btn line-action-btn--counter" data-counter-qr-line="${line.number}" title="Counter setup QR and link">Counter</button>
+                            <a href="${checkerUrlForLine(line.number)}" class="line-action-btn line-action-btn--checker" target="_blank" rel="noopener noreferrer" title="Open checker on this line">Checker</a>
                         </span>
                     </div>
                 </article>`;
@@ -1925,6 +1683,7 @@
                 for (let i = 1; i <= linesToFetch; i++) {
                     const prefix = lineKeyPrefix(base, i);
                     cmds.push(['GET', `${prefix}:count`]);
+                    cmds.push(['GET', `${prefix}:rejectCount`]);
                     cmds.push(['GET', `${prefix}:updatedAt`]);
                     cmds.push(['GET', `${prefix}:lineStop`]);
                     cmds.push(['GET', `${prefix}:lineStopReason`]);
@@ -1936,23 +1695,26 @@
                 }
 
                 const results = linesToFetch ? await redisRequest(cmds, true) : [];
-                const stride = 9;
+                const stride = 10;
                 const now = Date.now();
                 state.lines = [];
                 for (let i = 0; i < linesToFetch; i++) {
                     const off = i * stride;
                     const countRaw = results[off];
-                    const updatedAt = results[off + 1];
+                    const rejectRaw = results[off + 1];
+                    const updatedAt = results[off + 2];
                     const stopFields = parseLineStopFields(
-                        results[off + 2],
                         results[off + 3],
                         results[off + 4],
                         results[off + 5],
                         results[off + 6],
                         results[off + 7],
-                        results[off + 8]
+                        results[off + 8],
+                        results[off + 9]
                     );
                     const count = Math.max(0, parseInt(countRaw, 10) || 0);
+                    let rejectCount = Math.max(0, parseInt(rejectRaw, 10) || 0);
+                    if (rejectCount > count) rejectCount = count;
                     const updatedMs = updatedAt ? Date.parse(updatedAt) : NaN;
                     const stale = !stopFields.stopped && (!updatedAt || (now - updatedMs > 120000));
 
@@ -1960,6 +1722,7 @@
                         number: i + 1,
                         redisKey: `${lineKeyPrefix(state.keyPrefixBase, i + 1)}:count`,
                         count,
+                        rejectCount,
                         target: targets[i] ?? 0,
                         updatedAt: updatedAt || null,
                         stale,

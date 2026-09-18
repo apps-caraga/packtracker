@@ -7,8 +7,9 @@
     <link href="data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAYAAABPYyMiAAAABmJLR0T///////8JWPfcAAAACXBIWXMAAABIAAAASABGyWs+AAAAF0lEQVRIx2NgGAWjYBSMglEwCkbBSAcACBAAAeaR9cIAAAAASUVORK5CYII=" rel="icon" type="image/x-icon" />
 
     <!-- PWA Primary Meta Tags -->
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#0b0f17">
     <script src="dashboard-theme.js"></script>
+    <script src="line-stop-reasons.js"></script>
     <link rel="stylesheet" href="dashboard-themes.css">
     <meta name="description" content="Automated Family Food Pack box counter and QR/Barcode scanner PWA">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -68,10 +69,10 @@
 <body class="h-full flex flex-col font-sans antialiased overflow-hidden selection:theme">
 
     <!-- Passkey gate (client-only WebAuthn; no server) -->
-    <div id="passkeyGate" class="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur flex items-center justify-center p-4">
-        <div class="max-w-md w-full bg-slate-800 border border-slate-700/80 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
+    <div id="passkeyGate" class="dash-gate fixed inset-0 z-[100] backdrop-blur flex items-center justify-center p-4">
+        <div class="dash-gate-panel max-w-md w-full rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
             <div class="flex items-center gap-3">
-                <div class="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400">
+                <div class="counter-header-icon p-2.5 rounded-xl">
                     <i data-lucide="key-round" class="w-6 h-6"></i>
                 </div>
                 <div>
@@ -105,18 +106,19 @@
     </div>
 
     <!-- Top Application Header -->
-    <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700/60 sticky top-0 z-40 px-4 py-3">
+    <header class="counter-header sticky top-0 z-40 px-4 py-3">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400">
+                <div class="counter-header-icon p-2 rounded-xl">
                     <i data-lucide="package-check" class="w-6 h-6"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-lg leading-tight tracking-wide flex items-center gap-2">
-                        PackTracker 
-                        <span id="pwaBadge" class="hidden text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full uppercase font-semibold">Offline Ready</span>
+                    <h1 class="counter-title font-bold text-lg leading-tight tracking-wide flex items-center gap-2 flex-wrap">
+                        PackTracker PWA
+                        <span id="counterLineBadge" class="counter-line-indicator hidden" title="Production line">L—</span>
+                        <span id="pwaBadge" class="hidden status-pill is-running">Offline Ready</span>
                     </h1>
-                    <p class="text-xs text-slate-400">Webcam-based box counter</p>
+                    <p id="counterLineSubtitle" class="text-xs counter-subtitle">Family Food Pack Automated Counter</p>
                 </div>
             </div>
 
@@ -125,7 +127,7 @@
                 <button id="passkeyLockBtn" type="button" title="Lock app" class="hidden p-2 text-slate-400 hover:text-amber-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition">
                     <i data-lucide="lock" class="w-4 h-4"></i>
                 </button>
-                <span id="productionDayBadge" class="hidden text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-600 text-slate-500 bg-slate-900/60">CLOSED</span>
+                <span id="productionDayBadge" class="hidden status-pill is-closed">CLOSED</span>
                 <button id="settingsOpenBtn" type="button" title="Settings" class="p-2 text-slate-400 hover:text-emerald-300 rounded-lg hover:bg-slate-700/50 border border-transparent hover:border-slate-600 transition">
                     <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
                 </button>
@@ -154,32 +156,33 @@
                 <canvas id="viewCanvas" class="w-full h-full object-contain roi-canvas bg-black"></canvas>
                 
                 <!-- Live Detection Banner Alert Overlay -->
-                <div id="detectionOverlay" class="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500/90 text-white font-bold text-sm sm:text-base rounded-full shadow-lg border border-emerald-300/40 backdrop-blur opacity-0 transition-opacity duration-200 pointer-events-none flex items-center gap-2 z-30">
+                <div id="detectionOverlay" class="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 font-bold text-sm sm:text-base rounded-full shadow-lg backdrop-blur opacity-0 transition-opacity duration-200 pointer-events-none flex items-center gap-2 z-30">
                     <i data-lucide="scan-line" class="w-5 h-5 animate-spin"></i>
                     <span id="detectionOverlayText">PACK DETECTED!</span>
                 </div>
 
                 <div id="productionClosedBanner" class="hidden absolute inset-x-0 top-1/2 -translate-y-1/2 z-40 px-4 pointer-events-none flex justify-center">
-                    <div class="max-w-md w-full text-center px-4 py-3 rounded-xl bg-rose-950/92 border-2 border-rose-500/70 shadow-2xl backdrop-blur-sm">
-                        <p class="text-rose-200 font-bold text-sm sm:text-base uppercase tracking-wide flex items-center justify-center gap-2">
+                    <div class="production-closed-panel max-w-md w-full text-center px-4 py-3 rounded-xl backdrop-blur-sm">
+                        <p class="production-closed-title font-bold text-sm sm:text-base uppercase tracking-wide flex items-center justify-center gap-2">
                             <i data-lucide="circle-slash" class="w-5 h-5 shrink-0"></i>
                             Production line closed
                         </p>
-                        <p id="productionClosedBannerDetail" class="text-[11px] sm:text-xs text-rose-100/90 mt-1.5 leading-snug">Not counting boxes. Open the day on the dashboard to resume.</p>
+                        <p id="productionClosedBannerDetail" class="production-closed-detail text-[11px] sm:text-xs mt-1.5 leading-snug">Not counting boxes. Open the day on the dashboard to resume.</p>
                     </div>
                 </div>
 
                 <!-- Camera / system status (top left) -->
-                <div class="absolute top-3 left-3 flex items-center gap-2 bg-slate-900/80 backdrop-blur border border-slate-700 rounded-xl px-2.5 py-1.5 text-[11px] sm:text-xs text-slate-300 z-20 pointer-events-none">
+                <div class="camera-status-chip absolute top-3 left-3 flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-[11px] sm:text-xs z-20 pointer-events-none">
+                    <span id="cameraLineBadge" class="counter-line-indicator counter-line-indicator--compact hidden shrink-0" title="Production line">L—</span>
                     <span class="relative flex h-2.5 w-2.5 shrink-0">
-                        <span id="statusPing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                        <span id="statusDot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                        <span id="statusPing" class="status-ping hidden"></span>
+                        <span id="statusDot" class="status-dot is-connecting"></span>
                     </span>
                     <span id="statusText" class="font-medium whitespace-nowrap">Initializing Camera...</span>
                 </div>
 
                 <!-- Canvas Control Quick Bar (Top Right) -->
-                <div class="absolute top-3 right-3 flex items-center gap-2 bg-slate-900/80 backdrop-blur border border-slate-700 rounded-xl p-1.5 z-20">
+                <div class="camera-toolbar absolute top-3 right-3 flex items-center gap-2 rounded-xl p-1.5 z-20">
                     <button id="toggleCameraBtn" title="Stop Camera" class="p-2 text-emerald-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition">
                         <i id="toggleCameraIcon" data-lucide="video-off" class="w-4 h-4"></i>
                     </button>
@@ -198,18 +201,19 @@
                 </div>
 
                 <!-- Drag Instruction Badge -->
-                <div id="roiInstruction" class="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur border border-slate-700/70 text-slate-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 pointer-events-none z-20">
+                <div id="roiInstruction" class="camera-hint-chip absolute bottom-3 left-3 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 pointer-events-none z-20">
                     <i data-lucide="move" class="w-3.5 h-3.5 text-emerald-400"></i>
                     <span>Enter <b>Detection Zone</b> → Pass <b>Midpoint</b> to <b>Count Zone</b></span>
                 </div>
             </div>
 
             <!-- Counter Display Card (below camera) -->
-            <div class="count-display-card bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/80 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden">
+            <div id="countDisplayCard" class="count-display-card rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden">
                 <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-                <span class="count-display-label text-xs font-bold uppercase tracking-widest text-emerald-400/90 mb-1 flex items-center gap-1.5">
-                    <i data-lucide="award" class="w-4 h-4"></i> Total Packs Counted
+                <span class="count-display-label text-xs font-bold uppercase tracking-widest text-emerald-400/90 mb-1 flex items-center justify-center gap-1.5 flex-wrap">
+                    <span id="countCardLineBadge" class="counter-line-indicator counter-line-indicator--compact hidden">L—</span>
+                    <span class="inline-flex items-center gap-1.5"><i data-lucide="award" class="w-4 h-4"></i> Total Packs Counted</span>
                 </span>
 
                 <div class="flex items-baseline justify-center gap-2 my-1">
@@ -219,7 +223,7 @@
                     <p id="lineTargetLabel" class="hidden text-lg sm:text-xl font-bold font-mono text-amber-300/90 tabular-nums">/ 11</p>
                 </div>
                 <p id="lineTargetStatus" class="hidden text-[11px] text-emerald-400/90 font-semibold uppercase tracking-wide mb-1">Line target met — counting paused</p>
-                <p id="productionClosedStatus" class="hidden text-[11px] text-slate-400 font-semibold uppercase tracking-wide mb-1">Production closed — open the day on the dashboard to count</p>
+                <p id="productionClosedStatus" class="hidden status-pill is-closed mb-2">Production closed</p>
 
                 <div class="grid grid-cols-2 gap-3 w-full max-w-md mt-2 pt-3 border-t border-slate-700/60 count-display-divider text-xs">
                     <div class="count-display-stat bg-slate-900/50 p-2.5 rounded-xl border border-slate-800 flex flex-col items-center">
@@ -232,7 +236,15 @@
                     </div>
                 </div>
 
+                <p id="lineStopStatusPill" class="hidden status-pill is-stopped mb-2 max-w-full" title=""></p>
+
                 <div class="flex flex-wrap items-center gap-2 w-full max-w-md mt-3">
+                    <button type="button" id="stopLineBtn" class="hidden flex-1 min-w-[7rem] py-2 px-3 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                        <i data-lucide="octagon-pause" class="w-4 h-4"></i> Stop line
+                    </button>
+                    <button type="button" id="resumeLineBtn" class="hidden flex-1 min-w-[7rem] py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                        <i data-lucide="play" class="w-4 h-4"></i> Resume line
+                    </button>
                     <button id="manualAddBtn" class="flex-1 min-w-[7rem] py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition">
                         <i data-lucide="plus" class="w-4 h-4"></i> +1 Manual
                     </button>
@@ -259,6 +271,29 @@
             <div class="flex gap-2">
                 <button type="button" id="setCountCancelBtn" class="flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-sm font-semibold rounded-xl transition">Cancel</button>
                 <button type="button" id="setCountApplyBtn" class="flex-1 py-2.5 px-3 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="lineStopModal" class="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/70 opacity-0 pointer-events-none transition-opacity" role="dialog" aria-modal="true" aria-labelledby="counterLineStopTitle">
+        <div class="line-stop-panel max-w-md w-full rounded-2xl border shadow-2xl p-5 space-y-4 transform scale-95 opacity-0 transition-all duration-200" style="background: var(--dash-card); border-color: var(--dash-border); color: var(--dash-text)">
+            <h3 id="counterLineStopTitle" class="font-semibold text-sm flex items-center gap-2">
+                <i data-lucide="octagon-pause" class="w-5 h-5 text-rose-400"></i>
+                Stop this line
+            </h3>
+            <p class="text-[11px] dash-muted leading-relaxed">Only this line stops counting. The reason appears on the dashboard line card.</p>
+            <div class="space-y-2">
+                <p id="counterLineStopReasonLabel" class="text-[11px] dash-muted font-medium">Why is this line stopped?</p>
+                <div id="counterLineStopReasonPicker" class="line-stop-picker-host" role="radiogroup" aria-labelledby="counterLineStopReasonLabel"></div>
+            </div>
+            <div id="counterLineStopRemarksWrap" class="hidden space-y-1">
+                <label for="counterLineStopRemarksInput" class="block text-[11px] dash-muted font-medium">Remarks</label>
+                <textarea id="counterLineStopRemarksInput" rows="2" maxlength="280" placeholder="Enter remarks" class="line-stop-field resize-y"></textarea>
+            </div>
+            <p id="counterLineStopError" class="hidden text-[11px] text-rose-400"></p>
+            <div class="flex gap-2">
+                <button type="button" id="counterLineStopCancel" class="flex-1 py-2.5 px-3 rounded-xl border text-xs font-semibold" style="border-color: var(--dash-border); color: var(--dash-muted)">Cancel</button>
+                <button type="button" id="counterLineStopConfirm" class="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-xl">Stop line</button>
             </div>
         </div>
     </div>
@@ -567,6 +602,15 @@
             productionMetaLoaded: false,
             dashboardMetaBase: '',
             lastProductionClosedNotifyAt: 0,
+            lineStopActive: false,
+            lineStopReason: '',
+            lineStopRemarks: '',
+            lineStopCategory: '',
+            lineStopAt: '',
+            lineStopBy: '',
+            lineStopMetaLoaded: false,
+            lastLineStopNotifyAt: 0,
+            lineStopPickerApi: null,
             dashboardTargetPollId: null,
             lastAckDashboardResetAt: '',
             /** Last :updatedAt value read from or written to Upstash for this line. */
@@ -588,9 +632,23 @@
             lineTargetLabel: document.getElementById('lineTargetLabel'),
             lineTargetStatus: document.getElementById('lineTargetStatus'),
             productionClosedStatus: document.getElementById('productionClosedStatus'),
+            counterLineBadge: document.getElementById('counterLineBadge'),
+            counterLineSubtitle: document.getElementById('counterLineSubtitle'),
+            cameraLineBadge: document.getElementById('cameraLineBadge'),
+            countCardLineBadge: document.getElementById('countCardLineBadge'),
             productionDayBadge: document.getElementById('productionDayBadge'),
             productionClosedBanner: document.getElementById('productionClosedBanner'),
             productionClosedBannerDetail: document.getElementById('productionClosedBannerDetail'),
+            lineStopStatusPill: document.getElementById('lineStopStatusPill'),
+            stopLineBtn: document.getElementById('stopLineBtn'),
+            resumeLineBtn: document.getElementById('resumeLineBtn'),
+            lineStopModal: document.getElementById('lineStopModal'),
+            counterLineStopReasonPicker: document.getElementById('counterLineStopReasonPicker'),
+            counterLineStopRemarksWrap: document.getElementById('counterLineStopRemarksWrap'),
+            counterLineStopRemarksInput: document.getElementById('counterLineStopRemarksInput'),
+            counterLineStopError: document.getElementById('counterLineStopError'),
+            counterLineStopCancel: document.getElementById('counterLineStopCancel'),
+            counterLineStopConfirm: document.getElementById('counterLineStopConfirm'),
             ratePerMin: document.getElementById('ratePerMin'),
             sessionTimer: document.getElementById('sessionTimer'),
             sensitivitySlider: document.getElementById('sensitivitySlider'),
@@ -794,10 +852,28 @@
             return !productionIsOpenForToday();
         }
 
+        function lineIsStopped() {
+            if (!enforcesProductionDayFromUpstash()) return false;
+            if (!state.lineStopMetaLoaded) return false;
+            return !!state.lineStopActive;
+        }
+
         function countingAllowed() {
             if (!enforcesProductionDayFromUpstash()) return true;
             if (!state.productionMetaLoaded) return false;
-            return productionIsOpenForToday();
+            if (!productionIsOpenForToday()) return false;
+            if (state.lineStopActive) return false;
+            return true;
+        }
+
+        function applyLineStopFromRedis(stopRaw, reasonRaw, categoryRaw, remarksRaw, atRaw, byRaw) {
+            state.lineStopMetaLoaded = true;
+            state.lineStopActive = stopRaw === '1' || stopRaw === 'true';
+            state.lineStopReason = state.lineStopActive && reasonRaw ? String(reasonRaw).trim() : '';
+            state.lineStopCategory = state.lineStopActive && categoryRaw ? String(categoryRaw).trim() : '';
+            state.lineStopRemarks = state.lineStopActive && remarksRaw ? String(remarksRaw).trim() : '';
+            state.lineStopAt = state.lineStopActive && atRaw ? String(atRaw).trim() : '';
+            state.lineStopBy = state.lineStopActive && byRaw ? String(byRaw).trim() : '';
         }
 
         function applyProductionMetaFromRedis(dayDate, dayStatus, dayClosedAt, dayAutoCloseRaw) {
@@ -871,6 +947,16 @@
             }
         }
 
+        function notifyLineStopped(reason) {
+            const now = Date.now();
+            if (now - state.lastLineStopNotifyAt < 1800) return;
+            state.lastLineStopNotifyAt = now;
+            const detail = reason || state.lineStopReason || 'Line is stopped';
+            showDetectionOverlay(`LINE STOPPED — ${detail.length > 36 ? detail.slice(0, 34) + '…' : detail}`);
+            elements.detectionOverlay?.classList.add('is-alert-closed');
+            setTimeout(() => elements.detectionOverlay?.classList.remove('is-alert-closed'), 2200);
+        }
+
         function notifyProductionLineClosed(reason) {
             const now = Date.now();
             if (now - state.lastProductionClosedNotifyAt < 1800) return;
@@ -887,14 +973,83 @@
 
         function showProductionClosedFlash() {
             elements.detectionOverlayText.innerText = 'PRODUCTION LINE CLOSED';
-            elements.detectionOverlay.classList.remove('bg-emerald-500/90', 'border-emerald-300/40');
-            elements.detectionOverlay.classList.add('bg-rose-600/95', 'border-rose-300/50');
+            elements.detectionOverlay.classList.add('is-alert-closed');
             elements.detectionOverlay.style.opacity = '1';
             setTimeout(() => {
                 elements.detectionOverlay.style.opacity = '0';
-                elements.detectionOverlay.classList.remove('bg-rose-600/95', 'border-rose-300/50');
-                elements.detectionOverlay.classList.add('bg-emerald-500/90', 'border-emerald-300/40');
+                elements.detectionOverlay.classList.remove('is-alert-closed');
             }, 2200);
+        }
+
+        function setCameraStatusDot(kind) {
+            const map = {
+                connecting: 'is-connecting',
+                running: 'is-running',
+                live: 'is-live',
+                error: 'is-error',
+                closed: 'is-closed',
+                idle: 'is-idle'
+            };
+            const cls = map[kind] || map.idle;
+            if (elements.statusDot) {
+                elements.statusDot.className = `status-dot ${cls}`;
+            }
+            if (elements.statusPing) {
+                elements.statusPing.className = kind === 'connecting'
+                    ? 'status-ping is-connecting animate-ping absolute inline-flex h-full w-full rounded-full opacity-75'
+                    : 'status-ping hidden';
+            }
+        }
+
+        function lineAccentIndex(lineNum) {
+            const n = parseInt(lineNum, 10);
+            if (!Number.isFinite(n) || n < 1) return 0;
+            return ((n - 1) % 3) + 1;
+        }
+
+        function applyLineIndicatorToEl(el, line) {
+            if (!el) return;
+            el.classList.remove('line-ind-accent-1', 'line-ind-accent-2', 'line-ind-accent-3', 'line-ind-accent-unset');
+            if (!line) {
+                el.classList.add('hidden', 'line-ind-accent-unset');
+                el.textContent = 'L—';
+                el.title = 'Set line number in settings or URL (?line=1)';
+                return;
+            }
+            el.classList.remove('hidden');
+            const accent = lineAccentIndex(line);
+            if (accent) el.classList.add(`line-ind-accent-${accent}`);
+            el.textContent = `L${line}`;
+            el.title = `Production line ${line}`;
+        }
+
+        function updateLineIndicator() {
+            const line = resolvedLineNumber();
+            applyLineIndicatorToEl(elements.counterLineBadge, line);
+            applyLineIndicatorToEl(elements.cameraLineBadge, line);
+            applyLineIndicatorToEl(elements.countCardLineBadge, line);
+            if (elements.counterLineSubtitle) {
+                elements.counterLineSubtitle.textContent = line
+                    ? `Line ${line} · Family Food Pack Automated Counter`
+                    : 'Set line number in settings (or ?line=1 in the URL)';
+            }
+            const headerIcon = document.querySelector('.counter-header-icon');
+            if (headerIcon) {
+                headerIcon.classList.remove('line-ind-accent-1', 'line-ind-accent-2', 'line-ind-accent-3');
+                const accent = lineAccentIndex(line);
+                if (accent) headerIcon.classList.add(`line-ind-accent-${accent}`);
+            }
+            applyLineAccentToCounterCard();
+        }
+
+        function applyLineAccentToCounterCard() {
+            const card = document.getElementById('countDisplayCard');
+            if (!card) return;
+            card.classList.remove('line-accent-1', 'line-accent-2', 'line-accent-3');
+            const line = resolvedLineNumber();
+            if (!line) return;
+            const accent = lineAccentIndex(line);
+            if (accent) card.classList.add(`line-accent-${accent}`);
         }
 
         function mergeFromDashboardLocalStorage(force = false) {
@@ -1386,6 +1541,7 @@
                 }
                 try {
                     await this.resolveDashboardMetaBase();
+                    const prefix = effectiveRedisKeyPrefix();
                     const results = await this.request([
                         ['GET', dashboardMetaKey('totalTarget')],
                         ['GET', dashboardMetaKey('lineCount')],
@@ -1394,11 +1550,18 @@
                         ['GET', dashboardMetaKey('dayStatus')],
                         ['GET', dashboardMetaKey('dayClosedAt')],
                         ['GET', dashboardMetaKey('dayAutoClose')],
+                        ['GET', `${prefix}:lineStop`],
+                        ['GET', `${prefix}:lineStopReason`],
+                        ['GET', `${prefix}:lineStopCategory`],
+                        ['GET', `${prefix}:lineStopRemarks`],
+                        ['GET', `${prefix}:lineStopAt`],
+                        ['GET', `${prefix}:lineStopBy`],
                     ], true);
                     const totalTarget = parseInt(results[0], 10) || 0;
                     const lineCount = parseInt(results[1], 10) || 0;
                     await applyDashboardRemoteReset(results[2]);
                     applyProductionMetaFromRedis(results[3], results[4], results[5], results[6]);
+                    applyLineStopFromRedis(results[7], results[8], results[9], results[10], results[11], results[12]);
 
                     const remote = await this.fetchLineCountFromRedis();
                     adoptCountFromUpstash(remote);
@@ -1415,6 +1578,40 @@
                 if (!this.canQueryRedis()) return;
                 this.refreshLineTargetCap();
                 state.dashboardTargetPollId = setInterval(() => this.refreshLineTargetCap(), 5000);
+            },
+
+            async publishLineStop(stopped, meta = {}) {
+                if (!this.canQueryRedis() || !resolvedLineNumber()) {
+                    throw new Error('Configure Upstash and line number first.');
+                }
+                const prefix = effectiveRedisKeyPrefix();
+                if (stopped) {
+                    const opt = meta.reasonId && window.PackTrackerLineStop
+                        ? PackTrackerLineStop.findOption(meta.reasonId)
+                        : null;
+                    const reasonLabel = meta.reasonLabel || opt?.label || 'Stopped';
+                    const category = meta.category || opt?.category || '';
+                    await this.request([
+                        ['SET', `${prefix}:lineStop`, '1'],
+                        ['SET', `${prefix}:lineStopReason`, reasonLabel],
+                        ['SET', `${prefix}:lineStopReasonId`, meta.reasonId || ''],
+                        ['SET', `${prefix}:lineStopCategory`, category],
+                        ['SET', `${prefix}:lineStopRemarks`, (meta.remarks || '').trim()],
+                        ['SET', `${prefix}:lineStopAt`, new Date().toISOString()],
+                        ['SET', `${prefix}:lineStopBy`, meta.source || 'counter']
+                    ], true);
+                } else {
+                    await this.request([
+                        ['SET', `${prefix}:lineStop`, '0'],
+                        ['SET', `${prefix}:lineStopReason`, ''],
+                        ['SET', `${prefix}:lineStopReasonId`, ''],
+                        ['SET', `${prefix}:lineStopCategory`, ''],
+                        ['SET', `${prefix}:lineStopRemarks`, ''],
+                        ['SET', `${prefix}:lineStopAt`, ''],
+                        ['SET', `${prefix}:lineStopBy`, '']
+                    ], true);
+                }
+                await this.refreshLineTargetCap();
             },
 
             async pushCountReset() {
@@ -1462,6 +1659,7 @@
                 elements.redisLineNumber.addEventListener('input', () => {
                     this.updateKeyPrefixPreview();
                     persist();
+                    updateLineIndicator();
                 });
 
                 elements.redisTestBtn.addEventListener('click', async () => {
@@ -2201,8 +2399,7 @@
             elements.toggleTorchBtn.classList.remove('text-amber-400');
             elements.toggleTorchBtn.classList.add('text-slate-400');
 
-            elements.statusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-500';
-            elements.statusPing.classList.add('hidden');
+            setCameraStatusDot('idle');
 
             const canvas = elements.viewCanvas;
             ctx.fillStyle = '#000';
@@ -2222,8 +2419,7 @@
             }
 
             elements.statusText.innerText = "Connecting Camera...";
-            elements.statusDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500";
-            elements.statusPing.classList.remove('hidden');
+            setCameraStatusDot('connecting');
 
             const constraints = {
                 video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' },
@@ -2238,8 +2434,7 @@
 
                 state.isCameraActive = true;
                 updateSystemStatusText();
-                elements.statusDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500";
-                elements.statusPing.classList.add('hidden');
+                setCameraStatusDot(productionShowsClosed() || lineIsStopped() ? 'closed' : 'running');
 
                 const track = stream.getVideoTracks()[0];
                 const capabilities = track.getCapabilities ? track.getCapabilities() : {};
@@ -2256,8 +2451,7 @@
                 state.isCameraActive = false;
                 stopQrScanLoop();
                 elements.statusText.innerText = "Camera Access Failed";
-                elements.statusDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500";
-                elements.statusPing.classList.add('hidden');
+                setCameraStatusDot('error');
                 updateCameraToggleUI();
             }
         }
@@ -2504,7 +2698,8 @@
             if (validDirectionPass && (now - state.lastBoxTriggerTime > state.boxCooldownMs)) {
                 state.lastBoxTriggerTime = now;
                 if (!countingAllowed()) {
-                    notifyProductionLineClosed();
+                    if (lineIsStopped()) notifyLineStopped();
+                    else notifyProductionLineClosed();
                     return;
                 }
                 if (!canIncrementCount()) {
@@ -2721,7 +2916,8 @@
                 AudioEngine.playBeep('qr');
                 showDetectionOverlay(`SCANNED: ${codeFound.length > 28 ? codeFound.slice(0, 28) + '…' : codeFound}`);
             } else if (!countingAllowed()) {
-                notifyProductionLineClosed('Barcode scanned — production line is closed.');
+                if (lineIsStopped()) notifyLineStopped('Barcode scanned — line is stopped.');
+                else notifyProductionLineClosed('Barcode scanned — production line is closed.');
             } else {
                 showDetectionOverlay(`SCANNED (not counted): ${codeFound.length > 22 ? codeFound.slice(0, 22) + '…' : codeFound}`);
             }
@@ -2965,7 +3161,8 @@
 
         function triggerBoxCountEvent() {
             if (!countingAllowed()) {
-                notifyProductionLineClosed();
+                if (lineIsStopped()) notifyLineStopped();
+                else notifyProductionLineClosed();
                 return;
             }
             if (!canIncrementCount()) return;
@@ -2981,7 +3178,8 @@
         function incrementCount(metadata = {}) {
             if (!canIncrementCount()) {
                 if (!countingAllowed()) {
-                    notifyProductionLineClosed();
+                    if (lineIsStopped()) notifyLineStopped();
+                    else notifyProductionLineClosed();
                 } else {
                     showDetectionOverlay(
                         state.lineTargetCap > 0
@@ -3033,7 +3231,8 @@
 
         function setCountDirect(newCount, { skipConfirmOverCap = false } = {}) {
             if (!countingAllowed()) {
-                showDetectionOverlay('PRODUCTION CLOSED');
+                if (lineIsStopped()) notifyLineStopped();
+                else showDetectionOverlay('PRODUCTION CLOSED');
                 return false;
             }
             const n = parseDirectCountInput(newCount);
@@ -3107,7 +3306,8 @@
 
         function decrementCount(metadata = {}) {
             if (!countingAllowed()) {
-                showDetectionOverlay('PRODUCTION CLOSED');
+                if (lineIsStopped()) notifyLineStopped();
+                else showDetectionOverlay('PRODUCTION CLOSED');
                 return;
             }
             if (state.count <= 0) {
@@ -3151,6 +3351,7 @@
         }
 
         function updateCounterUI() {
+            updateLineIndicator();
             elements.mainCountDisplay.innerText = state.count;
             elements.logCountBadge.innerText = `${state.logs.length} entries`;
 
@@ -3169,28 +3370,74 @@
             }
 
             const closed = productionShowsClosed();
+            const stopped = lineIsStopped();
             if (elements.productionClosedStatus) {
-                elements.productionClosedStatus.classList.toggle('hidden', !closed);
+                elements.productionClosedStatus.classList.toggle('hidden', !closed || stopped);
             }
             if (elements.productionClosedBanner) {
-                elements.productionClosedBanner.classList.toggle('hidden', !closed);
+                elements.productionClosedBanner.classList.toggle('hidden', !closed && !stopped);
             }
-            if (closed && elements.productionClosedBannerDetail && state.dayClosedAt) {
-                elements.productionClosedBannerDetail.textContent =
-                    `Closed at ${new Date(state.dayClosedAt).toLocaleString()} — open the day on the dashboard to count.`;
-            } else if (closed && elements.productionClosedBannerDetail) {
-                elements.productionClosedBannerDetail.textContent =
-                    'Not counting boxes. Open the production day on the dashboard to resume.';
+            if (elements.productionClosedBannerDetail) {
+                if (stopped) {
+                    const label = window.PackTrackerLineStop
+                        ? PackTrackerLineStop.displayReasonLabel(state.lineStopReason, state.lineStopRemarks)
+                        : state.lineStopReason;
+                    elements.productionClosedBannerDetail.textContent =
+                        `Line stopped: ${label}. Tap Resume line to count again.`;
+                } else if (closed && state.dayClosedAt) {
+                    elements.productionClosedBannerDetail.textContent =
+                        `Closed at ${new Date(state.dayClosedAt).toLocaleString()} — open the day on the dashboard to count.`;
+                } else if (closed) {
+                    elements.productionClosedBannerDetail.textContent =
+                        'Not counting boxes. Open the production day on the dashboard to resume.';
+                }
             }
-            if (elements.statusText && enforcesProductionDayFromUpstash()) {
-                if (closed) {
+            if (elements.lineStopStatusPill) {
+                if (stopped) {
+                    const label = window.PackTrackerLineStop
+                        ? PackTrackerLineStop.displayReasonLabel(state.lineStopReason, state.lineStopRemarks)
+                        : state.lineStopReason;
+                    elements.lineStopStatusPill.classList.remove('hidden');
+                    elements.lineStopStatusPill.textContent = `Stopped — ${label}`;
+                    elements.lineStopStatusPill.title = window.PackTrackerLineStop
+                        ? PackTrackerLineStop.pillTitle({
+                            reasonLabel: state.lineStopReason,
+                            category: state.lineStopCategory,
+                            remarks: state.lineStopRemarks,
+                            stoppedAt: state.lineStopAt,
+                            stoppedBy: state.lineStopBy
+                        })
+                        : state.lineStopReason;
+                } else {
+                    elements.lineStopStatusPill.classList.add('hidden');
+                }
+            }
+            const canManageLineStop = enforcesProductionDayFromUpstash() && !!resolvedLineNumber();
+            if (elements.stopLineBtn) {
+                elements.stopLineBtn.classList.toggle('hidden', !canManageLineStop || stopped || closed);
+            }
+            if (elements.resumeLineBtn) {
+                elements.resumeLineBtn.classList.toggle('hidden', !canManageLineStop || !stopped);
+            }
+            if (elements.statusText) {
+                if (enforcesProductionDayFromUpstash() && closed) {
                     elements.statusText.textContent = 'Production CLOSED';
-                    elements.statusDot?.classList.remove('bg-emerald-500', 'bg-amber-500');
-                    elements.statusDot?.classList.add('bg-rose-500');
-                    elements.statusPing?.classList.add('hidden');
-                } else if (state.isCameraActive) {
-                    elements.statusDot?.classList.remove('bg-rose-500');
-                    elements.statusPing?.classList.remove('hidden');
+                    setCameraStatusDot('closed');
+                } else if (enforcesProductionDayFromUpstash() && stopped) {
+                    elements.statusText.textContent = 'Line STOPPED';
+                    setCameraStatusDot('closed');
+                } else {
+                    updateSystemStatusText();
+                    const statusLabel = elements.statusText.innerText || '';
+                    if (state.isCameraActive) {
+                        setCameraStatusDot('running');
+                    } else if (statusLabel === 'Connecting Camera...') {
+                        setCameraStatusDot('connecting');
+                    } else if (statusLabel === 'Camera Access Failed') {
+                        setCameraStatusDot('error');
+                    } else {
+                        setCameraStatusDot('idle');
+                    }
                 }
             }
             if (elements.productionDayBadge) {
@@ -3198,9 +3445,7 @@
                     elements.productionDayBadge.classList.remove('hidden');
                     const label = closed ? 'CLOSED' : 'OPEN';
                     elements.productionDayBadge.textContent = label;
-                    elements.productionDayBadge.className = closed
-                        ? 'text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-slate-500/50 text-slate-300 bg-slate-800/80'
-                        : 'text-[10px] uppercase font-semibold px-2 py-1 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/10';
+                    elements.productionDayBadge.className = `status-pill ${closed ? 'is-closed' : 'is-open'}`;
                 } else {
                     elements.productionDayBadge.classList.add('hidden');
                 }
@@ -3360,6 +3605,94 @@
             window.addEventListener('touchend', onEnd);
         }
 
+        function ensureCounterLineStopReasonPicker() {
+            if (!elements.counterLineStopReasonPicker || !window.PackTrackerLineStop) return null;
+            if (!state.lineStopPickerApi) {
+                state.lineStopPickerApi = PackTrackerLineStop.mountReasonPicker(elements.counterLineStopReasonPicker, {
+                    inputName: 'counterLineStopReason'
+                });
+                state.lineStopPickerApi.onChange(() => syncCounterLineStopRemarksVisibility());
+            }
+            return state.lineStopPickerApi;
+        }
+
+        function getSelectedCounterLineStopReasonId() {
+            const api = ensureCounterLineStopReasonPicker();
+            return api ? api.getSelectedId() : '';
+        }
+
+        function syncCounterLineStopRemarksVisibility() {
+            if (!elements.counterLineStopRemarksWrap) return;
+            const reasonId = getSelectedCounterLineStopReasonId();
+            const opt = window.PackTrackerLineStop ? PackTrackerLineStop.findOption(reasonId) : null;
+            const needs = !!(opt && (opt.needsRemarks || reasonId === 'other'));
+            elements.counterLineStopRemarksWrap.classList.toggle('hidden', !needs);
+        }
+
+        function resetCounterLineStopDropdowns() {
+            ensureCounterLineStopReasonPicker();
+            state.lineStopPickerApi?.reset();
+            if (elements.counterLineStopRemarksInput) elements.counterLineStopRemarksInput.value = '';
+            syncCounterLineStopRemarksVisibility();
+        }
+
+        function openCounterLineStopModal() {
+            if (!elements.lineStopModal) return;
+            resetCounterLineStopDropdowns();
+            if (elements.counterLineStopError) {
+                elements.counterLineStopError.classList.add('hidden');
+                elements.counterLineStopError.textContent = '';
+            }
+            elements.lineStopModal.classList.remove('opacity-0', 'pointer-events-none');
+            elements.lineStopModal.querySelector('.line-stop-panel')?.classList.remove('scale-95', 'opacity-0');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function closeCounterLineStopModal() {
+            if (!elements.lineStopModal) return;
+            elements.lineStopModal.classList.add('opacity-0', 'pointer-events-none');
+            elements.lineStopModal.querySelector('.line-stop-panel')?.classList.add('scale-95', 'opacity-0');
+        }
+
+        async function confirmCounterLineStop() {
+            const reasonId = getSelectedCounterLineStopReasonId();
+            const opt = window.PackTrackerLineStop ? PackTrackerLineStop.findOption(reasonId) : null;
+            if (!opt) {
+                if (elements.counterLineStopError) {
+                    elements.counterLineStopError.textContent = 'Select why this line is stopped.';
+                    elements.counterLineStopError.classList.remove('hidden');
+                }
+                return;
+            }
+            const remarks = (elements.counterLineStopRemarksInput?.value || '').trim();
+            if (opt.needsRemarks && !remarks) {
+                if (elements.counterLineStopError) {
+                    elements.counterLineStopError.textContent = 'Remarks are required for Other.';
+                    elements.counterLineStopError.classList.remove('hidden');
+                }
+                return;
+            }
+            elements.counterLineStopConfirm.disabled = true;
+            try {
+                await UpstashSync.publishLineStop(true, {
+                    reasonId: opt.id,
+                    reasonLabel: opt.label,
+                    category: opt.category,
+                    remarks,
+                    source: 'counter'
+                });
+                closeCounterLineStopModal();
+                updateCounterUI();
+            } catch (e) {
+                if (elements.counterLineStopError) {
+                    elements.counterLineStopError.textContent = e.message || 'Failed to stop line';
+                    elements.counterLineStopError.classList.remove('hidden');
+                }
+            } finally {
+                elements.counterLineStopConfirm.disabled = false;
+            }
+        }
+
         function setupEventListeners() {
             document.getElementById('counterSettingsForm')?.addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -3367,6 +3700,22 @@
 
             SettingsPanel.bind();
             UpstashSync.bindEvents();
+
+            elements.stopLineBtn?.addEventListener('click', openCounterLineStopModal);
+            elements.resumeLineBtn?.addEventListener('click', async () => {
+                if (!confirm('Resume this line? Counting will continue.')) return;
+                try {
+                    await UpstashSync.publishLineStop(false);
+                    updateCounterUI();
+                } catch (e) {
+                    alert(e.message || 'Resume failed');
+                }
+            });
+            elements.counterLineStopCancel?.addEventListener('click', closeCounterLineStopModal);
+            elements.counterLineStopConfirm?.addEventListener('click', confirmCounterLineStop);
+            elements.lineStopModal?.addEventListener('click', (e) => {
+                if (e.target === elements.lineStopModal) closeCounterLineStopModal();
+            });
 
             elements.toggleCameraBtn.addEventListener('click', async () => {
                 if (state.isCameraActive) {
@@ -3668,6 +4017,7 @@
             UpstashSync.loadConfig();
             await UpstashSync.syncFromDashboard();
             UpstashSync.applyConfigToForm();
+            updateLineIndicator();
             loadLocalStorage();
             if (UpstashSync.canQueryRedis()) {
                 await UpstashSync.refreshLineTargetCap();
@@ -3676,6 +4026,7 @@
             }
             await UpstashSync.pullCountFromRedis({ initial: true });
             UpstashSync.startDashboardTargetPolling();
+            if (window.PackTrackerLineStop) resetCounterLineStopDropdowns();
             setupEventListeners();
             setupRoiInteractions();
 
